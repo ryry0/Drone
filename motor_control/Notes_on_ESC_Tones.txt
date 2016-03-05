@@ -1,0 +1,94 @@
+From: http://www.rcgroups.com/forums/showthread.php?t=657606
+
+
+
+I FINALLY got the programming instructions for the Mystery 40A - 120A ESC. I re-typed it since the original was barely legible.
+
+
+Users Manual (FM 40A, FM 60A, FM 80A, FM 120A)
+
+Specifications:
+
+Model: FM40A FM60A FM80A FM120A
+Continuous working current: 40A 60A 80A 120A
+
+Input Voltage: NiMH 6 - 16 Cells
+Li-ion 2 - 5 Cells
+
+BEC Current: No
+Weight: 35g 55g 55g 70g
+
+Main Functions
+
+1. Safety mode: the motor won't start no matter what the position of the control stick is when
+switched on the RC unit.
+2. Brake Setting: On/Off (factory setting is off)
+3. Three point battery type and low voltage selection.
+4. Software reversion of motor turning direction.
+5. Low current protection: ignore/reduce power/shut off
+6. Temperature protection: reduce power when the temperature reaches 120 degrees C
+7. PWM frequency: 8KHZ/16KHZ
+8. RPM setting: 20,000rpm/50,000rpm/100,000rpm (60A/80A Only)
+
+
+ESC program procedure
+
+Normal Start Up
+
+When throttle stick is off, you will hear one Beep for Brake on, or two tones for Brake off.
+
+Program
+When throttle stick is at full power connect battery and switch on and wait for 5 seconds.
+Setup mode isentered:
+
+1. Brake: If you pull the stick to off within 5 sec Brake will be changed
+(On ->Off or Off ->On)
+2. Battery type: (Voltage Cut-off)
+Ni-Cad . . . . .
+2 Lipos(5.6V) .. .. .. .. ..
+3 Lipos(8.4V) ... ... ... ... ...
+4 Lipos(11.2V) .... .... .... .... ....
+5 Lipos(14V) ..... ..... ..... ..... .....
+
+3. Rotation Reverse: Reverse motor rotation 5 short musical notes
+4. Soft Start: Enable: 5 short musical notes
+Disable: 5 long musical notes
+
+5. Under Voltage:
+Ignore: _.. _.. _.. _.. _..
+Reduce Power: _. _. _. _. _.
+Cut Off: ._ ._ ._ ._ ._
+
+6. Timing:
+Automatic (7 - 30 Degree) .. .. .. .. ..
+Soft (7 degrees) .. .. .. .. .. .. .. .. .. ..
+Hard(22 - 30 Degrees) .. .. .. .. .. .. .. .. .. .. .. .. .. .. ..
+
+7. Frequency: 8kHz ' ' ' ' '
+16kHz b b b b b
+
+Restore Default Settings: _____ _____ _____ _____ _____
+
+8. Active rpm control:
+
+rpm control off: _._ _._ _._ _._ _._
+20,000 rpm _.._ _.._ _.._ _.._ _.._
+50,000 rpm _..._ _..._ _..._ _..._ _..._
+100,000 rpm _...._ _...._ _...._ _...._ _...._
+(60A/80A only)
+
+Factory Default Settings:
+Brake: Off Battery Type: 3 Li-Poly Under Voltage: Reduce Power Soft Start: Enable
+
+Timing: Auto Frequency: 8kHz Active RPM Control: Off
+
+Notice:
+
+1. Make sure the connections for battery positive/negative are right. Reversing the connection
+will damage the ESC permanently.
+2. Use suitable batteries. Do not exceed the working voltage of the ESC.
+3. The company keeps the right to change design, function, or package without notice.
+4. Take care in using safely. Incorrect use may cause injury to the body. The company will
+not be responsible for any damage or loss caused by incorrect operation.
+
+Enjoy 

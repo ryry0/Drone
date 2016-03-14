@@ -66,39 +66,6 @@ void boardInit(void)
 
   /**************************************************************************/
   /*
-   * PWM SETUP
-   */
-  /**************************************************************************/
-  //enable counters and io control block
-  LPC_SYSCON->SYSAHBCLKCTRL |= (1 << SYSCLK_IOCON)  |
-    (1 << SYSCLK_CT32B0) |
-    (1 << SYSCLK_CT32B1) |
-    (1 << SYSCLK_CT16B0) |
-    (1 << SYSCLK_CT16B1);
-
-  //configure pin 13 as match output
-  LPC_IOCON->TDO_PIO0_13  = PINMODE_CT32B1_MAT0;
-  LPC_CT32B1->MCR |= (1 << RESET_MR3);
-
-
-  //PWM freq = (sys_clock/prescaler)/tick_match
-  LPC_CT32B1->MR0 = duty; //set the duty cycle
-
-  //set the period -> timer will be reset when it hits this value
-  LPC_CT32B1->MR3 = 1999; //set the pwm freq to 50hz
-
-  //set the prescaler
-  LPC_CT32B1->PR = 719;
-
-  LPC_CT32B1->PWMC |= (1 << PWMEN0) |
-    (1 << PWMEN1) |
-    (1 << PWMEN2);
-
-  LPC_CT32B1->TCR = 1; //enable timer
-
-
-  /**************************************************************************/
-  /*
    * ADC SETUP
    */
   /**************************************************************************/
@@ -106,12 +73,10 @@ void boardInit(void)
   LPC_IOCON->TDI_PIO0_11   &= 0xFFFFFF9F;
   LPC_IOCON->TDI_PIO0_11  |= 0x02;
 
-  adcInit();
-  /*
+  //adcInit();
   LPC_SYSCON->PDRUNCFG &= ~(1 << ADC_PD); //power up adc
   LPC_SYSCON->SYSAHBCLKCTRL |= (1 << SYSCLK_ADC); //send clock to adc
 
-  */
 
   //LPC_ADC->CR = (1 << ADC_LPWRMODE) | (1 << AD0) | (4 << AD0_CLKDIV);
   /*
@@ -156,13 +121,13 @@ int main(void)
       //LPC_GPIO->B0[P0_8] = lastSecond % 2;
     }
 
-    /*
     //start ad0 conversion
     LPC_ADC->CR |= (1 << AD0_START);
 
     //wait until done
+    regdata = LPC_ADC->DR0;
     while (regdata < 0x7FFFFFFF) {
-      regdata = LPC_ADC->GDR;
+      regdata = LPC_ADC->DR0;
     }
 
     //stop ADC Conversion
@@ -171,25 +136,14 @@ int main(void)
 
     //get the result starting at the 4th bit and mask it
 
-    //adc_result = (LPC_ADC->GDR >> 4) & 0xfff;
-    */
+    adc_result = (LPC_ADC->DR0 >> 4) & 0xfff;
 
-    if (LPC_GPIO->B0[P0_16] == 0) {
-      duty -= 5;
-      while (LPC_GPIO->B0[P0_16] == 0);
-    }
+    //adc_result = adcRead(0);
 
-    if (LPC_GPIO->B0[P0_17] == 0) {
-      duty += 5;
-      while (LPC_GPIO->B0[P0_17] == 0);
-    }
-
-    if (duty < 1800)
-      duty = 1800;
-    else if (duty > 1900)
-      duty = 1900;
-
-    LPC_CT32B1->MR0 = duty;
+    if (adc_result > 0x10)
+      LPC_GPIO->B0[P0_8] = 1;
+    else
+      LPC_GPIO->B0[P0_8] = 0;
   }
 }
 

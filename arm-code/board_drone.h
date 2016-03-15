@@ -431,7 +431,7 @@ extern "C" {
     CFG_PROTOCOL             If this field is defined the binary command
                               parser will be included
     -----------------------------------------------------------------------*/
-    #define CFG_PROTOCOL
+    //#define CFG_PROTOCOL
 
     #define CFG_PROTOCOL_VIA_HID
     // #define CFG_PROTOCOL_VIA_BULK
@@ -671,7 +671,7 @@ extern "C" {
     NOTE: Windows requires the .inf file in '/core/usb' for CDC support
     -----------------------------------------------------------------------*/
     #ifdef CFG_ENABLE_USB
-      #define CFG_USB_STRING_MANUFACTURER       "microBuilder.eu"
+      #define CFG_USB_STRING_MANUFACTURER       "Ryan R"
       #define CFG_USB_STRING_PRODUCT            "LPC1347 LPCXpresso"
       #define CFG_USB_VENDORID                  (0x1FC9)
 
@@ -679,8 +679,8 @@ extern "C" {
 
       // #define CFG_USB_HID_KEYBOARD
       // #define CFG_USB_HID_MOUSE
-      #define CFG_USB_HID_GENERIC
-      #define CFG_USB_HID_GENERIC_REPORT_SIZE (64)
+      //#define CFG_USB_HID_GENERIC
+      //#define CFG_USB_HID_GENERIC_REPORT_SIZE (64)
 
       // #define CFG_USB_MSC
 

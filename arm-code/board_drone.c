@@ -40,12 +40,31 @@
 #include "core/pmu/pmu.h"
 #include "core/adc/adc.h"
 
+
+#ifdef CFG_USB
+#include "core/usb/usbd.h"
+#ifdef CFG_USB_CDC
+#include "core/usb/usb_cdc.h"
+#endif
+#endif
+
 uint32_t duty = 1900;
+
+//crappy delay but I need to use systick and counter interrupts
+void _delay_ms (uint16_t ms)
+{
+  uint16_t delay;
+  volatile uint32_t i;
+  //1ms loop with -Os optimisation
+  for (delay = ms; delay >0 ; delay--) {
+    for (i=3500; i >0;i--);
+  }
+}
 
 /**************************************************************************/
 /*!
-    @brief Board-specific initialisation function
-*/
+  @brief Board-specific initialisation function
+  */
 /**************************************************************************/
 void boardInit(void)
 {
@@ -58,12 +77,19 @@ void boardInit(void)
   /**************************************************************************/
 
   GPIOInit();
+
   LPC_GPIO->DIR[PORT0] |= (1 << P0_7);
   LPC_GPIO->DIR[PORT0] |= (1 << P0_8);
   LPC_GPIO->DIR[PORT0] &= ~(1 << P0_17); //set to inputs
   LPC_GPIO->DIR[PORT0] &= ~(1 << P0_16);
 
-  //LPC_SYSCON->SYSTICKCLKDIV = 0x01; //enable system clock and divide by 1
+
+  /* Initialise USB */
+#ifdef CFG_USB
+  _delay_ms(2000);
+  usb_init();
+#endif
+
   SysTick->CTRL = 0x07;
   SysTick->LOAD = 0x00057e3f;
 }
@@ -81,14 +107,13 @@ void SysTick_Handler(void) {
 
 /**************************************************************************/
 /*!
-    @brief Primary (non-RTOS!) entry point for this project.
-*/
+  @brief Primary (non-RTOS!) entry point for this project.
+  */
 /**************************************************************************/
 int main(void)
 {
   uint32_t currentSecond, lastSecond;
   uint32_t adc_result = 0;
-  volatile uint32_t regdata = 0;
   currentSecond = lastSecond = 0;
 
   /* Configure the HW */
@@ -96,7 +121,9 @@ int main(void)
 
   for (;;)
   {
-
+    printf("Hello World\n");
+    _delay_ms(1000);
+    LPC_GPIO->NOT[PORT0] |= (1 << P0_7);
   }
 }
 

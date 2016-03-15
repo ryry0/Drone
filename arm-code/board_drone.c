@@ -50,7 +50,6 @@ uint32_t duty = 1900;
 void boardInit(void)
 {
   SystemCoreClockUpdate();
-  delayInit();
 
   /**************************************************************************/
   /*
@@ -64,35 +63,20 @@ void boardInit(void)
   LPC_GPIO->DIR[PORT0] &= ~(1 << P0_17); //set to inputs
   LPC_GPIO->DIR[PORT0] &= ~(1 << P0_16);
 
-  /**************************************************************************/
-  /*
-   * ADC SETUP
-   */
-  /**************************************************************************/
-
-  LPC_IOCON->TDI_PIO0_11   &= 0xFFFFFF9F;
-  LPC_IOCON->TDI_PIO0_11  |= 0x02;
-
-  //adcInit();
-  LPC_SYSCON->PDRUNCFG &= ~(1 << ADC_PD); //power up adc
-  LPC_SYSCON->SYSAHBCLKCTRL |= (1 << SYSCLK_ADC); //send clock to adc
+  //LPC_SYSCON->SYSTICKCLKDIV = 0x01; //enable system clock and divide by 1
+  SysTick->CTRL = 0x07;
+  SysTick->LOAD = 0x00057e3f;
+}
 
 
-  //LPC_ADC->CR = (1 << ADC_LPWRMODE) | (1 << AD0) | (4 << AD0_CLKDIV);
-  /*
-  LPC_ADC->CR = (0x01 << 0)                            |
-    ((SystemCoreClock / ADC_CLK - 1) << 8) |  // CLKDIV = Fpclk / 1000000 - 1
-    (0 << 16)                              |  // BURST = 0, no BURST, software controlled
-    (0 << 17)                              |  // CLKS = 0, 11 clocks/10 bits
-#if CFG_ADC_MODE_LOWPOWER
-    (1 << 22)                              |  // Low-power mode
-#endif
-#if CFG_ADC_MODE_10BIT
-    (1 << 23)                              |  // 10-bit mode
-#endif
-    (0 << 24)                              |  // START = 0 A/D conversion stops
-    (0 << 27);                                // EDGE = 0 (CAP/MAT rising edge, trigger A/D conversion)
-    */
+/**************************************************************************/
+/*
+ * SYSTICK HANDLER
+ */
+/**************************************************************************/
+
+void SysTick_Handler(void) {
+  LPC_GPIO->NOT[PORT0] |= (1 << P0_8);
 }
 
 /**************************************************************************/
@@ -112,38 +96,7 @@ int main(void)
 
   for (;;)
   {
-    /* Blinky (1Hz) */
-    currentSecond = delayGetSecondsActive();
-    if (currentSecond != lastSecond)
-    {
-      lastSecond = currentSecond;
-      LPC_GPIO->B0[P0_7] = lastSecond % 2;
-      //LPC_GPIO->B0[P0_8] = lastSecond % 2;
-    }
 
-    //start ad0 conversion
-    LPC_ADC->CR |= (1 << AD0_START);
-
-    //wait until done
-    regdata = LPC_ADC->DR0;
-    while (regdata < 0x7FFFFFFF) {
-      regdata = LPC_ADC->DR0;
-    }
-
-    //stop ADC Conversion
-    LPC_ADC->CR &= ~(0x07 << AD0_START); //clear the start bits
-    LPC_ADC->CR &= 0xF8FFFFFF; //clear the start bits
-
-    //get the result starting at the 4th bit and mask it
-
-    adc_result = (LPC_ADC->DR0 >> 4) & 0xfff;
-
-    //adc_result = adcRead(0);
-
-    if (adc_result > 0x10)
-      LPC_GPIO->B0[P0_8] = 1;
-    else
-      LPC_GPIO->B0[P0_8] = 0;
   }
 }
 

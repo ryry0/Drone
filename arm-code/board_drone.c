@@ -75,9 +75,7 @@ void _delay_ms (uint16_t ms);
 void SysTick_Handler(void) {
   //time it using oscope
   //LPC_GPIO->NOT[PORT0] |= (1 << P0_8);
-  //integrate
-  gyro_data.roll += (gyro_data.raw_roll_dot/GYRO_SCALING) * DELTA_TIME;
-  gyro_data.pitch += (gyro_data.raw_pitch_dot/GYRO_SCALING) * DELTA_TIME;
+  //integrate gyro data for angle
   gyro_data.yaw += (gyro_data.raw_yaw_dot/GYRO_SCALING) * DELTA_TIME;
 
   accel_data.xg = accel_data.raw_x * ACCEL_SCALING;
@@ -93,16 +91,14 @@ void SysTick_Handler(void) {
       sqrt(accel_data.yg*accel_data.yg + accel_data.zg*accel_data.zg))*
     180/M_PI;
 
-  //quad_copter.roll = accel_data.roll;
-  //quad_copter.pitch = accel_data.pitch;
-
-  //RENAME XYZ to ROLL ETC
   //complementary filter
-  quad_copter.roll = FIL_ALPHA * (gyro_data.roll) +
-    (1-FIL_ALPHA)*accel_data.roll;
+  quad_copter.roll = FIL_ALPHA *
+    (quad_copter.roll + ((gyro_data.raw_roll_dot/GYRO_SCALING)*DELTA_TIME)) +
+    (1-FIL_ALPHA) * accel_data.roll;
 
-  quad_copter.pitch = FIL_ALPHA * (gyro_data.pitch) +
-    (1-FIL_ALPHA)*accel_data.pitch;
+  quad_copter.pitch = FIL_ALPHA *
+    (quad_copter.pitch + ((gyro_data.raw_pitch_dot/GYRO_SCALING)*DELTA_TIME)) +
+    (1-FIL_ALPHA) * accel_data.pitch;
 
   quad_copter.yaw = gyro_data.yaw;
 }

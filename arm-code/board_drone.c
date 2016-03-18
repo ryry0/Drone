@@ -26,27 +26,19 @@
 #define PINMODE_AD0 0x02
 #define RESET_MR3 10
 
-//Gyroscope defines
-#define ITG3205     0x68
-#define ITG3205WR   0xD0
-#define ITG3205RD   0xD1
-
-#define SMPLRT_DIV    0x15
-#define DLPF_FS       0x16
-#define INT_CFG       0x17
-#define GYRO_XOUT_H   0x1D
-#define PWR_MGM       0x3E
-#define GYRO_SCALING  14.375
-#define CALIB_SAMPLES 10 //max 255
-
 //Accelerometer defines
-#define ADXL345     0x53
-#define ADXL345WR   0xA6
-#define ADXL345RD   0xA7
+#define ADXL345       0x53
+#define ADXL345WR     0xA6
+#define ADXL345RD     0xA7
+#define DATA_FORMAT   0x01
+#define POWER_CTL     0x2D
+#define ACCEL_SCALING 0.0039
+#define ACCEL_DATA_X0 0x32
 
 #define DELTA_TIME 0.010
 
 #include <string.h> /* strlen */
+#include <math.h>
 
 #include "boards/board.h"
 #include "core/gpio/gpio.h"
@@ -55,7 +47,8 @@
 #include "core/pmu/pmu.h"
 #include "core/adc/adc.h"
 #include "core/i2c/i2c.h"
-
+#include "lpc_gyro.h"
+#include "lpc_accel.h"
 
 #ifdef CFG_USB
 #include "core/usb/usbd.h"
@@ -64,31 +57,15 @@
 #endif
 #endif
 
-typedef struct gyro_data_t {
-  float x; //roll
-  float y; //pitch
-  float z; //yaw
-
-  int16_t x_off;
-  int16_t y_off;
-  int16_t z_off;
-
-  int16_t raw_x;
-  int16_t raw_y;
-  int16_t raw_z;
-} gyro_data_t;
-
 uint32_t duty = 1900;
 volatile uint32_t tick = 0;
+
 volatile gyro_data_t gyro_data = {0};
+volatile accel_data_t accel_data = {0};
+
+void boardInit(void);
 
 void _delay_ms (uint16_t ms);
-void boardInit(void);
-void initGyro(void);
-void readGyro(volatile gyro_data_t *gyro_data);
-void calibrateGyro(volatile gyro_data_t *gyro_data);
-
-
 /**************************************************************************/
 /*
  * SYSTICK HANDLER
@@ -97,9 +74,20 @@ void calibrateGyro(volatile gyro_data_t *gyro_data);
 
 void SysTick_Handler(void) {
   //LPC_GPIO->NOT[PORT0] |= (1 << P0_8);
+  /*
   gyro_data.x += (gyro_data.raw_x/GYRO_SCALING) * DELTA_TIME;
   gyro_data.y += (gyro_data.raw_y/GYRO_SCALING) * DELTA_TIME;
   gyro_data.z += (gyro_data.raw_z/GYRO_SCALING) * DELTA_TIME;
+  */
+
+  accel_data.xg = accel_data.raw_x * ACCEL_SCALING;
+  accel_data.yg = accel_data.raw_y * ACCEL_SCALING;
+  accel_data.zg = accel_data.raw_z * ACCEL_SCALING;
+
+  accel_data.roll = atan2(accel_data.yg, accel_data.zg)*180/M_PI;
+  accel_data.pitch = atan2(-accel_data.xg, 
+      sqrt(accel_data.yg*accel_data.yg + accel_data.zg*accel_data.zg))*
+    180/M_PI;
 }
 
 /**************************************************************************/
@@ -108,16 +96,20 @@ int main(void)
 
   /* configure the HW */
   boardInit();
-  initGyro();
-  calibrateGyro(&gyro_data);
+  initAccel();
+  calibrateAccel(&accel_data);
+  //initGyro();
+  //calibrateGyro(&gyro_data);
 
   for (;;)
   {
     LPC_GPIO->NOT[PORT0] |= (1 << P0_7);
 
-    readGyro(&gyro_data);
+    //readGyro(&gyro_data);
+    readAccel(&accel_data);
+
     printf("%f %f %f\n",
-        gyro_data.x, gyro_data.y, gyro_data.z);
+        accel_data.roll, accel_data.pitch, 0.0);
 
     //clear gyro values
     if (LPC_GPIO->B0[P0_17] == 0) {
@@ -128,7 +120,7 @@ int main(void)
 
     _delay_ms(10);
   }
-}
+} //end main
 
 //crappy delay but I need to use systick and counter interrupts
 void _delay_ms (uint16_t ms)
@@ -205,78 +197,6 @@ void boardInit(void)
   /**************************************************************************/
 
   i2cInit(I2CMASTER);
-}
+} //boardInit
 
-void initGyro(void) {
-  //set pwr_mgm to zero
-  I2CReadLength = 0;
-  I2CWriteLength = 3; //Inclusive of the address
-  I2CMasterBuffer[0] = ITG3205WR;
-  I2CMasterBuffer[1] = PWR_MGM;
-  I2CMasterBuffer[2] = 0x00;
-  i2cEngine();
-
-  //set sample rate divider to 0x07
-  I2CReadLength = 0;
-  I2CWriteLength = 3; //Inclusive of the address
-  I2CMasterBuffer[0] = ITG3205WR;
-  I2CMasterBuffer[1] = SMPLRT_DIV;
-  I2CMasterBuffer[2] = 0x07;
-  i2cEngine();
-
-  //set Digital lpf to 0x1e
-  I2CReadLength = 0;
-  I2CWriteLength = 3; //Inclusive of the address
-  I2CMasterBuffer[0] = ITG3205WR;
-  I2CMasterBuffer[1] = DLPF_FS;
-  I2CMasterBuffer[2] = 0x1E;
-  i2cEngine();
-
-  //set interrupt config to 0x0
-  I2CReadLength = 0;
-  I2CWriteLength = 3; //Inclusive of the address
-  I2CMasterBuffer[0] = ITG3205WR;
-  I2CMasterBuffer[1] = INT_CFG;
-  I2CMasterBuffer[2] = 0x00;
-  i2cEngine();
-
-} //end gyroInit
-
-void calibrateGyro(volatile gyro_data_t *gyro_data) {
-  int16_t x_sum = 0, y_sum = 0, z_sum = 0;
-
-  gyro_data->x_off = 0;
-  gyro_data->y_off = 0;
-  gyro_data->z_off = 0;
-
-  for (uint8_t i = 0; i < CALIB_SAMPLES; i++) {
-    readGyro(gyro_data);
-
-    x_sum += gyro_data->raw_x;
-    y_sum += gyro_data->raw_y;
-    z_sum += gyro_data->raw_z;
-  }
-
-  gyro_data->x_off = x_sum/CALIB_SAMPLES;
-  gyro_data->y_off = y_sum/CALIB_SAMPLES;
-  gyro_data->z_off = z_sum/CALIB_SAMPLES;
-} //end calibrateGyro
-
-void readGyro(volatile gyro_data_t *gyro_data) {
-  I2CReadLength = 6;
-  I2CWriteLength = 2; //inclusive of address
-  I2CMasterBuffer[0] = ITG3205WR;
-  I2CMasterBuffer[1] = GYRO_XOUT_H;
-  I2CMasterBuffer[2] = ITG3205RD;
-
-  i2cEngine(); //i2cengine blocks until error or finished
-
-  gyro_data->raw_x = ((I2CSlaveBuffer[0] << 8) | I2CSlaveBuffer[1]) -
-    gyro_data->x_off;
-  gyro_data->raw_y = ((I2CSlaveBuffer[2] << 8) | I2CSlaveBuffer[3]) -
-    gyro_data->y_off;
-  gyro_data->raw_z = ((I2CSlaveBuffer[4] << 8) | I2CSlaveBuffer[5]) -
-    gyro_data->z_off;
-
-} //end readGyro
 #endif /* CFG_BRD_LPCXPRESSO_LPC1347 */

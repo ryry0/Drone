@@ -56,6 +56,7 @@ OBJS  += $(OBJ_PATH)/board_lpcxpresso1347.o
 #IMPORTANT
 VPATH += .
 OBJS  += $(OBJ_PATH)/board_drone.o
+OBJS  += $(OBJ_PATH)/lpc_gyro.o
 
 VPATH += $(LIBDIR)/src/boards/rf1ghzusb
 OBJS  += $(OBJ_PATH)/board_rf1ghzusb.o

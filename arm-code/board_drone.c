@@ -26,14 +26,7 @@
 #define PINMODE_AD0 0x02
 #define RESET_MR3 10
 
-//Accelerometer defines
-#define ADXL345       0x53
-#define ADXL345WR     0xA6
-#define ADXL345RD     0xA7
-#define DATA_FORMAT   0x01
-#define POWER_CTL     0x2D
-#define ACCEL_SCALING 0.0039
-#define ACCEL_DATA_X0 0x32
+#define FIL_ALPHA 0.98
 
 #define DELTA_TIME 0.010
 
@@ -57,9 +50,16 @@
 #endif
 #endif
 
+typedef struct copter_t {
+  float roll;
+  float pitch;
+  float yaw;
+} copter_t;
+
 uint32_t duty = 1900;
 volatile uint32_t tick = 0;
 
+volatile copter_t quad_copter = {0};
 volatile gyro_data_t gyro_data = {0};
 volatile accel_data_t accel_data = {0};
 
@@ -73,43 +73,59 @@ void _delay_ms (uint16_t ms);
 /**************************************************************************/
 
 void SysTick_Handler(void) {
+  //time it using oscope
   //LPC_GPIO->NOT[PORT0] |= (1 << P0_8);
-  /*
+  //integrate
   gyro_data.x += (gyro_data.raw_x/GYRO_SCALING) * DELTA_TIME;
   gyro_data.y += (gyro_data.raw_y/GYRO_SCALING) * DELTA_TIME;
   gyro_data.z += (gyro_data.raw_z/GYRO_SCALING) * DELTA_TIME;
-  */
 
   accel_data.xg = accel_data.raw_x * ACCEL_SCALING;
   accel_data.yg = accel_data.raw_y * ACCEL_SCALING;
   accel_data.zg = accel_data.raw_z * ACCEL_SCALING;
 
-  accel_data.roll = atan2(accel_data.yg, accel_data.zg)*180/M_PI;
-  accel_data.pitch = atan2(-accel_data.xg, 
+  //get position from z facing down (probs need to change)
+  accel_data.roll = atan2(accel_data.yg,
+      sqrt(accel_data.xg*accel_data.xg + accel_data.zg*accel_data.zg))*
+    180/M_PI;
+
+  accel_data.pitch = atan2(-accel_data.xg,
       sqrt(accel_data.yg*accel_data.yg + accel_data.zg*accel_data.zg))*
     180/M_PI;
+
+  //quad_copter.roll = accel_data.roll;
+  //quad_copter.pitch = accel_data.pitch;
+
+  //RENAME XYZ to ROLL ETC
+  //complementary filter
+  quad_copter.roll = FIL_ALPHA * (gyro_data.x) +
+    (1-FIL_ALPHA)*accel_data.roll;
+
+  quad_copter.pitch = FIL_ALPHA * (gyro_data.y) +
+    (1-FIL_ALPHA)*accel_data.pitch;
+
+  quad_copter.yaw = gyro_data.z;
 }
 
 /**************************************************************************/
-int main(void)
-{
+int main(void) {
 
   /* configure the HW */
   boardInit();
   initAccel();
-  calibrateAccel(&accel_data);
-  //initGyro();
-  //calibrateGyro(&gyro_data);
+  initGyro();
 
-  for (;;)
-  {
+  calibrateAccel(&accel_data);
+  calibrateGyro(&gyro_data);
+
+  for (;;) {
     LPC_GPIO->NOT[PORT0] |= (1 << P0_7);
 
-    //readGyro(&gyro_data);
+    readGyro(&gyro_data);
     readAccel(&accel_data);
 
     printf("%f %f %f\n",
-        accel_data.roll, accel_data.pitch, 0.0);
+        quad_copter.roll, quad_copter.pitch, quad_copter.yaw);
 
     //clear gyro values
     if (LPC_GPIO->B0[P0_17] == 0) {

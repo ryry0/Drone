@@ -11,6 +11,7 @@
 #define POWER_CTL     0x2D
 #define ACCEL_SCALING 0.0039
 #define ACCEL_DATA_X0 0x32
+
 #define CALIB_SAMPLES 10
 
 //value in g is (g-rnge / 2^resolution)

@@ -76,6 +76,7 @@ void calibrateAccel(volatile accel_data_t *accel_data) {
 
   accel_data->x_off = x_sum/CALIB_SAMPLES;
   accel_data->y_off = y_sum/CALIB_SAMPLES;
-  accel_data->z_off = z_sum/CALIB_SAMPLES;
+  accel_data->z_off = (z_sum/CALIB_SAMPLES) - 256; 
+  //assuming 1g on z axis
 } //end calibrateAccel
 

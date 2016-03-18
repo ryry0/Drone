@@ -76,9 +76,9 @@ void SysTick_Handler(void) {
   //time it using oscope
   //LPC_GPIO->NOT[PORT0] |= (1 << P0_8);
   //integrate
-  gyro_data.x += (gyro_data.raw_x/GYRO_SCALING) * DELTA_TIME;
-  gyro_data.y += (gyro_data.raw_y/GYRO_SCALING) * DELTA_TIME;
-  gyro_data.z += (gyro_data.raw_z/GYRO_SCALING) * DELTA_TIME;
+  gyro_data.roll += (gyro_data.raw_roll_dot/GYRO_SCALING) * DELTA_TIME;
+  gyro_data.pitch += (gyro_data.raw_pitch_dot/GYRO_SCALING) * DELTA_TIME;
+  gyro_data.yaw += (gyro_data.raw_yaw_dot/GYRO_SCALING) * DELTA_TIME;
 
   accel_data.xg = accel_data.raw_x * ACCEL_SCALING;
   accel_data.yg = accel_data.raw_y * ACCEL_SCALING;
@@ -98,13 +98,13 @@ void SysTick_Handler(void) {
 
   //RENAME XYZ to ROLL ETC
   //complementary filter
-  quad_copter.roll = FIL_ALPHA * (gyro_data.x) +
+  quad_copter.roll = FIL_ALPHA * (gyro_data.roll) +
     (1-FIL_ALPHA)*accel_data.roll;
 
-  quad_copter.pitch = FIL_ALPHA * (gyro_data.y) +
+  quad_copter.pitch = FIL_ALPHA * (gyro_data.pitch) +
     (1-FIL_ALPHA)*accel_data.pitch;
 
-  quad_copter.yaw = gyro_data.z;
+  quad_copter.yaw = gyro_data.yaw;
 }
 
 /**************************************************************************/
@@ -129,9 +129,9 @@ int main(void) {
 
     //clear gyro values
     if (LPC_GPIO->B0[P0_17] == 0) {
-      gyro_data.x = 0;
-      gyro_data.y = 0;
-      gyro_data.z = 0;
+      gyro_data.roll = 0;
+      gyro_data.pitch = 0;
+      gyro_data.yaw = 0;
     }
 
     _delay_ms(10);

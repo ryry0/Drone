@@ -47,23 +47,23 @@ void initGyro(void) {
  */
 /**************************************************************************/
 void calibrateGyro(volatile gyro_data_t *gyro_data) {
-  int16_t x_sum = 0, y_sum = 0, z_sum = 0;
+  int16_t roll_dot_sum = 0, pitch_dot_sum = 0, yaw_dot_sum = 0;
 
-  gyro_data->x_off = 0;
-  gyro_data->y_off = 0;
-  gyro_data->z_off = 0;
+  gyro_data->roll_dot_off = 0;
+  gyro_data->pitch_dot_off = 0;
+  gyro_data->yaw_dot_off = 0;
 
   for (uint8_t i = 0; i < CALIB_SAMPLES; i++) {
     readGyro(gyro_data);
 
-    x_sum += gyro_data->raw_x;
-    y_sum += gyro_data->raw_y;
-    z_sum += gyro_data->raw_z;
+    roll_dot_sum += gyro_data->raw_roll_dot;
+    pitch_dot_sum += gyro_data->raw_pitch_dot;
+    yaw_dot_sum += gyro_data->raw_yaw_dot;
   }
 
-  gyro_data->x_off = x_sum/CALIB_SAMPLES;
-  gyro_data->y_off = y_sum/CALIB_SAMPLES;
-  gyro_data->z_off = z_sum/CALIB_SAMPLES;
+  gyro_data->roll_dot_off = roll_dot_sum/CALIB_SAMPLES;
+  gyro_data->pitch_dot_off = pitch_dot_sum/CALIB_SAMPLES;
+  gyro_data->yaw_dot_off = yaw_dot_sum/CALIB_SAMPLES;
 } //end calibrateGyro
 
 
@@ -81,11 +81,11 @@ void readGyro(volatile gyro_data_t *gyro_data) {
 
   i2cEngine(); //i2cengine blocks until error or finished
 
-  gyro_data->raw_x = ((I2CSlaveBuffer[0] << 8) | I2CSlaveBuffer[1]) -
-    gyro_data->x_off;
-  gyro_data->raw_y = ((I2CSlaveBuffer[2] << 8) | I2CSlaveBuffer[3]) -
-    gyro_data->y_off;
-  gyro_data->raw_z = ((I2CSlaveBuffer[4] << 8) | I2CSlaveBuffer[5]) -
-    gyro_data->z_off;
+  gyro_data->raw_roll_dot = ((I2CSlaveBuffer[0] << 8) | I2CSlaveBuffer[1]) -
+    gyro_data->roll_dot_off;
+  gyro_data->raw_pitch_dot = ((I2CSlaveBuffer[2] << 8) | I2CSlaveBuffer[3]) -
+    gyro_data->pitch_dot_off;
+  gyro_data->raw_yaw_dot = ((I2CSlaveBuffer[4] << 8) | I2CSlaveBuffer[5]) -
+    gyro_data->yaw_dot_off;
 
 } //end readGyro

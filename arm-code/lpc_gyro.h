@@ -18,17 +18,17 @@
 #define CALIB_SAMPLES 10 //max 255
 
 typedef struct gyro_data_t {
-  float x; //roll
-  float y; //pitch
-  float z; //yaw
+  float roll; //x
+  float pitch; //y
+  float yaw; //z
 
-  int16_t x_off;
-  int16_t y_off;
-  int16_t z_off;
+  int16_t roll_dot_off;
+  int16_t pitch_dot_off;
+  int16_t yaw_dot_off;
 
-  int16_t raw_x;
-  int16_t raw_y;
-  int16_t raw_z;
+  int16_t raw_roll_dot;
+  int16_t raw_pitch_dot;
+  int16_t raw_yaw_dot;
 } gyro_data_t;
 
 void initGyro(void);

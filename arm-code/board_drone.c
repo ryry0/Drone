@@ -2,7 +2,6 @@
 
 #ifdef CFG_BRD_DRONE
 
-
 #define ADC_LPWRMODE 22
 #define AD0 0
 #define AD0_CLKDIV 8
@@ -27,9 +26,19 @@
 #define PINMODE_AD0 0x02
 #define RESET_MR3 10
 
-#define PWMEN0 0
-#define PWMEN1 0
-#define PWMEN2 0
+//Gyroscope defines
+#define ITG3205     0x68
+#define ITG3205WR   0xD0
+#define ITG3205RD   0xD1
+
+#define SMPLRT_DIV  0x15
+#define DLPF_FS     0x16
+#define INT_CFG     0x17
+#define GYRO_XOUT_H 0x1D
+#define PWR_MGM     0x3E
+#define GYRO_SCALING 14.375
+
+#define DELTA_TIME 0.010
 
 #include <string.h> /* strlen */
 
@@ -39,6 +48,7 @@
 #include "core/eeprom/eeprom.h"
 #include "core/pmu/pmu.h"
 #include "core/adc/adc.h"
+#include "core/i2c/i2c.h"
 
 
 #ifdef CFG_USB
@@ -48,7 +58,19 @@
 #endif
 #endif
 
+typedef struct gyro_data_t {
+  float x; //roll
+  float y; //pitch
+  float z; //yaw
+
+  int16_t raw_x;
+  int16_t raw_y;
+  int16_t raw_z;
+} gyro_data_t;
+
 uint32_t duty = 1900;
+volatile uint32_t tick = 0;
+volatile gyro_data_t gyro_data = {0};
 
 //crappy delay but I need to use systick and counter interrupts
 void _delay_ms (uint16_t ms)
@@ -84,6 +106,13 @@ void boardInit(void)
   LPC_GPIO->DIR[PORT0] &= ~(1 << P0_16);
 
 
+
+  /**************************************************************************/
+  /*
+   * USB SETUP
+   */
+  /**************************************************************************/
+
   /* Initialise USB */
 #ifdef CFG_USB
   _delay_ms(2000);
@@ -97,39 +126,80 @@ void boardInit(void)
    */
   /**************************************************************************/
 
-  LPC_IOCON->TDI_PIO0_11   &= ~0x9F;
-  LPC_IOCON->TDI_PIO0_11  |= 0x02;
+  //LPC_IOCON->TDI_PIO0_11   &= ~0x9F;
+  //LPC_IOCON->TDI_PIO0_11  |= 0x02;
 
 
-  adcInit();
+  //adcInit();
 
+  /**************************************************************************/
   /*
-  LPC_SYSCON->PDRUNCFG &= ~(1 << ADC_PD); //power up adc
-  LPC_SYSCON->SYSAHBCLKCTRL |= (1 << SYSCLK_ADC); //send clock to adc
-  */
+   * SYSTICK SETUP
+   */
+  /**************************************************************************/
 
-
-  //LPC_ADC->CR = (1 << ADC_LPWRMODE) | (1 << AD0) | (4 << AD0_CLKDIV);
-  /*
-  LPC_ADC->CR = (0x01 << 0)                            |
-    ((SystemCoreClock / ADC_CLK - 1) << 8) |  // CLKDIV = Fpclk / 1000000 - 1
-    (0 << 16)                              |  // BURST = 0, no BURST, software controlled
-    (0 << 17)                              |  // CLKS = 0, 11 clocks/10 bits
-#if CFG_ADC_MODE_LOWPOWER
-    (1 << 22)                              |  // Low-power mode
-#endif
-#if CFG_ADC_MODE_10BIT
-    (1 << 23)                              |  // 10-bit mode
-#endif
-    (0 << 24)                              |  // START = 0 A/D conversion stops
-    (0 << 27);                                // EDGE = 0 (CAP/MAT rising edge, trigger A/D conversion)
-    */
-
-  /* Initialize systick interrupt */
+  // Initialize systick interrupt to 10 ms 100 hz
   SysTick->CTRL = 0x07;
-  SysTick->LOAD = 0x00057e3f;
+  SysTick->LOAD = 0x000afc7f; //freq  = (system clk * desired interval) - 1
+
+  /**************************************************************************/
+  /*
+   * I2C SETUP
+   */
+  /**************************************************************************/
+
+  i2cInit(I2CMASTER);
 }
 
+void gyroInit(void) {
+  //set pwr_mgm to zero
+  I2CReadLength = 0;
+  I2CWriteLength = 3; //Inclusive of the address
+  I2CMasterBuffer[0] = ITG3205WR;
+  I2CMasterBuffer[1] = PWR_MGM;
+  I2CMasterBuffer[2] = 0x00;
+  i2cEngine();
+
+  //set sample rate divider to 0x07
+  I2CReadLength = 0;
+  I2CWriteLength = 3; //Inclusive of the address
+  I2CMasterBuffer[0] = ITG3205WR;
+  I2CMasterBuffer[1] = SMPLRT_DIV;
+  I2CMasterBuffer[2] = 0x07;
+  i2cEngine();
+
+  //set Digital lpf to 0x1e
+  I2CReadLength = 0;
+  I2CWriteLength = 3; //Inclusive of the address
+  I2CMasterBuffer[0] = ITG3205WR;
+  I2CMasterBuffer[1] = DLPF_FS;
+  I2CMasterBuffer[2] = 0x1E;
+  i2cEngine();
+
+  //set interrupt config to 0x0
+  I2CReadLength = 0;
+  I2CWriteLength = 3; //Inclusive of the address
+  I2CMasterBuffer[0] = ITG3205WR;
+  I2CMasterBuffer[1] = INT_CFG;
+  I2CMasterBuffer[2] = 0x00;
+  i2cEngine();
+
+} //end gyroInit
+
+void readGyro(gyro_data_t * gyro_data) {
+  I2CReadLength = 6;
+  I2CWriteLength = 2; //inclusive of address
+  I2CMasterBuffer[0] = ITG3205WR;
+  I2CMasterBuffer[1] = GYRO_XOUT_H;
+  I2CMasterBuffer[2] = ITG3205RD;
+
+  i2cEngine(); //i2cengine blocks until error or finished
+
+  gyro_data->raw_x = (I2CSlaveBuffer[0] << 8) | I2CSlaveBuffer[1];
+  gyro_data->raw_y = (I2CSlaveBuffer[2] << 8) | I2CSlaveBuffer[3];
+  gyro_data->raw_z = (I2CSlaveBuffer[4] << 8) | I2CSlaveBuffer[5];
+
+}
 
 /**************************************************************************/
 /*
@@ -139,6 +209,9 @@ void boardInit(void)
 
 void SysTick_Handler(void) {
   //LPC_GPIO->NOT[PORT0] |= (1 << P0_8);
+  gyro_data.x += (gyro_data.raw_x/GYRO_SCALING) * DELTA_TIME;
+  gyro_data.y += (gyro_data.raw_y/GYRO_SCALING) * DELTA_TIME;
+  gyro_data.z += (gyro_data.raw_z/GYRO_SCALING) * DELTA_TIME;
 }
 
 /**************************************************************************/
@@ -148,45 +221,25 @@ void SysTick_Handler(void) {
 /**************************************************************************/
 int main(void)
 {
-  uint32_t currentSecond, lastSecond;
-  uint32_t adc_result = 0, regdata = 0;
-  currentSecond = lastSecond = 0;
 
-  /* Configure the HW */
+  /* configure the HW */
   boardInit();
+  gyroInit();
 
   for (;;)
   {
     LPC_GPIO->NOT[PORT0] |= (1 << P0_7);
 
-    /*
-    //start ad0 conversion
-    LPC_ADC->CR |= (1 << AD0_START);
+    readGyro(&gyro_data);
+    printf("%f %f %f\n",
+        gyro_data.x, gyro_data.y, gyro_data.z);
 
-    //wait until done
-    regdata = LPC_ADC->DR0;
-    while (regdata < 0x7FFFFFFF) {
-      regdata = LPC_ADC->DR0;
+    if (LPC_GPIO->B0[P0_17] == 0) {
+      gyro_data.x = 0;
+      gyro_data.y = 0;
+      gyro_data.z = 0;
     }
-
-    //stop ADC Conversion
-    LPC_ADC->CR &= ~(0x07 << AD0_START); //clear the start bits
-    LPC_ADC->CR &= 0xF8FFFFFF; //clear the start bits
-
-    //get the result starting at the 4th bit and mask it
-
-    adc_result = (LPC_ADC->DR0 >> 4) & 0xfff;
-    */
-
-    adc_result = adcRead(0);
-
-    if (adc_result > 0x10)
-      LPC_GPIO->B0[P0_8] = 1;
-    else
-      LPC_GPIO->B0[P0_8] = 0;
-
-    printf("ADC: %x\n", adc_result);
-    _delay_ms(1000);
+    _delay_ms(10);
   }
 }
 

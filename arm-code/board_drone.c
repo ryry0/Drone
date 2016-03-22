@@ -30,6 +30,20 @@
 
 #define DELTA_TIME 0.010
 
+#define BAUDRATE 115200
+
+#define SERIAL_DEBUG
+
+//Wifi Defines
+#define AT_RESET        "AT+RST\r\n"
+#define AT_ACCEPT_CONNS "AT+CWMODE=3\r\n"
+#define AT_STATION      "AT+CWMODE=1\r\n"
+#define AT_FIRMWARE     "AT+GMR\r\n"
+#define AT_SCAN         "AT+CWLAP\r\n"
+#define AT_GET_IP       "AT+CIFSR\r\n"
+#define AT_CREAT_SERVER "AT+CIPSERVER=1,5555\r\n"
+#define AT_MULTI_CONN   "AT+CIPMUX=1\r\n"
+
 #include <string.h> /* strlen */
 #include <math.h>
 
@@ -40,13 +54,16 @@
 #include "core/pmu/pmu.h"
 #include "core/adc/adc.h"
 #include "core/i2c/i2c.h"
+#include "core/uart/uart.h"
 #include "lpc_gyro.h"
 #include "lpc_accel.h"
 
+#ifdef SERIAL_DEBUG
 #ifdef CFG_USB
 #include "core/usb/usbd.h"
 #ifdef CFG_USB_CDC
 #include "core/usb/usb_cdc.h"
+#endif
 #endif
 #endif
 
@@ -83,9 +100,7 @@ void SysTick_Handler(void) {
   accel_data.zg = accel_data.raw_z * ACCEL_SCALING;
 
   //get position from z facing down (probs need to change)
-  accel_data.roll = atan2(accel_data.yg,
-      sqrt(accel_data.xg*accel_data.xg + accel_data.zg*accel_data.zg))*
-    180/M_PI;
+  accel_data.roll = atan2(accel_data.yg, accel_data.zg)* 180/M_PI;
 
   accel_data.pitch = atan2(-accel_data.xg,
       sqrt(accel_data.yg*accel_data.yg + accel_data.zg*accel_data.zg))*
@@ -105,6 +120,7 @@ void SysTick_Handler(void) {
 
 /**************************************************************************/
 int main(void) {
+  uint8_t input_byte = 0;
 
   /* configure the HW */
   boardInit();
@@ -114,14 +130,48 @@ int main(void) {
   calibrateAccel(&accel_data);
   calibrateGyro(&gyro_data);
 
+  uartSend((uint8_t *)AT_RESET, strlen(AT_RESET));
+  uartSend((uint8_t *)AT_STATION, strlen(AT_STATION));
+  uartSend((uint8_t *)AT_CONNECT, strlen(AT_CONNECT));
+  _delay_ms(1000);
+  uartSend((uint8_t *)AT_MULTI_CONN, strlen(AT_MULTI_CONN));
+  _delay_ms(1000);
+  uartSend((uint8_t *)AT_CREAT_SERVER, strlen(AT_CREAT_SERVER));
+  _delay_ms(1000);
+
+  //wifi chip
+  for (;;) {
+    if (LPC_GPIO->B0[P0_17] == 0) {
+      while (LPC_GPIO->B0[P0_17] == 0);
+
+      _delay_ms(1000);
+      uartSend((uint8_t *)AT_CREAT_SERVER, strlen(AT_CREAT_SERVER));
+      _delay_ms(1000);
+    }
+
+    if (LPC_GPIO->B0[P0_16] == 0) {
+      while (LPC_GPIO->B0[P0_16] == 0);
+
+      uartSend((uint8_t *)AT_GET_IP, strlen(AT_GET_IP));
+    }
+
+    //flush the read buffer
+    while (uartRxBufferDataPending()) {
+      input_byte = uartRxBufferRead();
+      printf("%c", (char) input_byte);
+    }
+  } //end for
+
   for (;;) {
     LPC_GPIO->NOT[PORT0] |= (1 << P0_7);
 
     readGyro(&gyro_data);
     readAccel(&accel_data);
 
+#ifdef SERIAL_DEBUG
     printf("%f %f %f\n",
         quad_copter.roll, quad_copter.pitch, quad_copter.yaw);
+#endif
 
     //clear gyro values
     if (LPC_GPIO->B0[P0_17] == 0) {
@@ -174,9 +224,11 @@ void boardInit(void)
   /**************************************************************************/
 
   /* Initialise USB */
+#ifdef SERIAL_DEBUG
 #ifdef CFG_USB
   _delay_ms(2000);
   usb_init();
+#endif
 #endif
 
 
@@ -209,6 +261,14 @@ void boardInit(void)
   /**************************************************************************/
 
   i2cInit(I2CMASTER);
+
+  /**************************************************************************/
+  /*
+   * UART SETUP
+   */
+  /**************************************************************************/
+
+  uartInit(BAUDRATE);
 } //boardInit
 
 #endif /* CFG_BRD_LPCXPRESSO_LPC1347 */

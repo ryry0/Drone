@@ -2,7 +2,7 @@
 
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 
-void setPIDConstants(pid_data *pid, const float proportional_gain,
+void setPIDConstants(pid_data_t *pid, const float proportional_gain,
                      const float integral_gain, const float derivative_gain,
                      const float integral_guard) {
   pid->proportional_gain = proportional_gain;
@@ -13,7 +13,7 @@ void setPIDConstants(pid_data *pid, const float proportional_gain,
   pid->integral_error = 0;
 }
 
-void updatePID(pid_data *pid, const float *current_error, const float *delta_t) {
+void updatePID(pid_data_t *pid, const float *current_error, const float *delta_t) {
   float error_differential = 0;
 
   pid->integral_error += *current_error * (*delta_t);
@@ -30,7 +30,7 @@ void updatePID(pid_data *pid, const float *current_error, const float *delta_t) 
 
 //fixed update PID is meant to be called at constant time intervals,
 //therefore it does not need delta_t
-void fixedUpdatePID(pid_data *pid, const float *current_error) {
+void fixedUpdatePID(pid_data_t *pid, const float *current_error) {
   float error_differential = 0;
 
   pid->integral_error += *current_error;
@@ -43,5 +43,5 @@ void fixedUpdatePID(pid_data *pid, const float *current_error) {
                     (pid->integral_gain    * pid->integral_error) +
                     (pid->derivative_gain  * error_differential);
 
-  pid->previous_error = current_error;
+  pid->previous_error = *current_error;
 } //end pidControl()

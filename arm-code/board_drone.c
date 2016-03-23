@@ -22,7 +22,6 @@
 #define SYSCLK_CT16B0 7
 #define SYSCLK_CT16B1 8
 
-#define PINMODE_CT32B1_MAT0 0xa3
 #define PINMODE_AD0 0x02
 #define RESET_MR3 10
 
@@ -34,15 +33,21 @@
 
 #define SERIAL_DEBUG
 
-//Wifi Defines
-#define AT_RESET        "AT+RST\r\n"
-#define AT_ACCEPT_CONNS "AT+CWMODE=3\r\n"
-#define AT_STATION      "AT+CWMODE=1\r\n"
-#define AT_FIRMWARE     "AT+GMR\r\n"
-#define AT_SCAN         "AT+CWLAP\r\n"
-#define AT_GET_IP       "AT+CIFSR\r\n"
-#define AT_CREAT_SERVER "AT+CIPSERVER=1,5555\r\n"
-#define AT_MULTI_CONN   "AT+CIPMUX=1\r\n"
+//PWM defines
+#define PWMEN0 0
+#define PWMEN1 1
+#define PWMEN2 2
+
+#define PINMODE_CT16B0_MAT0 0x22
+#define PINMODE_CT16B1_MAT0 0x21
+
+#define PINMODE_CT32B0_MAT0 0x21
+#define PINMODE_CT32B1_MAT0 0xa3
+
+//TODO
+#define PRESCALER
+#define ZERO_MOTOR_SPEED
+#define PERIOD_MATCH
 
 #include <string.h> /* strlen */
 #include <math.h>
@@ -57,14 +62,15 @@
 #include "core/uart/uart.h"
 #include "lpc_gyro.h"
 #include "lpc_accel.h"
+#include "lpc_wifi.h"
 
 #ifdef SERIAL_DEBUG
-#ifdef CFG_USB
-#include "core/usb/usbd.h"
-#ifdef CFG_USB_CDC
-#include "core/usb/usb_cdc.h"
-#endif
-#endif
+  #ifdef CFG_USB
+    #include "core/usb/usbd.h"
+    #ifdef CFG_USB_CDC
+      #include "core/usb/usb_cdc.h"
+    #endif
+  #endif
 #endif
 
 typedef struct copter_t {
@@ -139,39 +145,11 @@ int main(void) {
   uartSend((uint8_t *)AT_CREAT_SERVER, strlen(AT_CREAT_SERVER));
   _delay_ms(1000);
 
-  //wifi chip
+  //main loop
   for (;;) {
-    if (LPC_GPIO->B0[P0_17] == 0) {
-      while (LPC_GPIO->B0[P0_17] == 0);
-
-      _delay_ms(1000);
-      uartSend((uint8_t *)AT_CREAT_SERVER, strlen(AT_CREAT_SERVER));
-      _delay_ms(1000);
-    }
-
-    if (LPC_GPIO->B0[P0_16] == 0) {
-      while (LPC_GPIO->B0[P0_16] == 0);
-
-      uartSend((uint8_t *)AT_GET_IP, strlen(AT_GET_IP));
-    }
-
-    //flush the read buffer
-    while (uartRxBufferDataPending()) {
-      input_byte = uartRxBufferRead();
-      printf("%c", (char) input_byte);
-    }
-  } //end for
-
-  for (;;) {
-    LPC_GPIO->NOT[PORT0] |= (1 << P0_7);
 
     readGyro(&gyro_data);
     readAccel(&accel_data);
-
-#ifdef SERIAL_DEBUG
-    printf("%f %f %f\n",
-        quad_copter.roll, quad_copter.pitch, quad_copter.yaw);
-#endif
 
     //clear gyro values
     if (LPC_GPIO->B0[P0_17] == 0) {
@@ -180,8 +158,19 @@ int main(void) {
       gyro_data.yaw = 0;
     }
 
-    _delay_ms(10);
-  }
+    //flush the read buffer
+    if (uartRxBufferDataPending()) {
+      input_byte = uartRxBufferRead();
+    }
+
+#ifdef SERIAL_DEBUG
+    printf("%f %f %f\n",
+        quad_copter.roll, quad_copter.pitch, quad_copter.yaw);
+
+    printf("%c", (char) input_byte);
+#endif
+
+  } //end for(;;)
 } //end main
 
 //crappy delay but I need to use systick and counter interrupts
@@ -219,6 +208,69 @@ void boardInit(void)
 
   /**************************************************************************/
   /*
+   * PWM SETUP
+   */
+  /**************************************************************************/
+  //enable counters and io control block
+  LPC_SYSCON->SYSAHBCLKCTRL |= (1 << SYSCLK_IOCON)  |
+    (1 << SYSCLK_CT32B0) |
+    (1 << SYSCLK_CT32B1) |
+    (1 << SYSCLK_CT16B0) |
+    (1 << SYSCLK_CT16B1);
+
+  //configure pin0 13 as match output
+  LPC_IOCON->TDO_PIO0_13  = PINMODE_CT32B1_MAT0;
+  //configure pin0 8
+  LPC_IOCON->PIO0_8 = PINMODE_CT16B0_MAT0;
+  //configure pin0 21
+  LPC_IOCON->PIO0_21 = PINMODE_CT16B1_MAT0;
+  //configure pin1 24
+  LPC_IOCON->PIO1_24 = PINMODE_CT32B0_MAT0;
+
+  LPC_CT32B0->MCR |= (1 << RESET_MR3);
+  LPC_CT32B1->MCR |= (1 << RESET_MR3);
+  LPC_CT16B0->MCR |= (1 << RESET_MR3);
+  LPC_CT16B1->MCR |= (1 << RESET_MR3);
+
+  //PWM freq = (sys_clock/prescaler)/tick_match
+  //set the duty cycle
+  LPC_CT32B0->MR0 = duty;
+  LPC_CT32B1->MR0 = duty;
+  LPC_CT16B0->MR0 = duty;
+  LPC_CT16B1->MR0 = duty;
+
+  //set the period -> timer will be reset when it hits this value
+  LPC_CT32B0->MR3 = 1999; //set the pwm freq to 50hz 
+  LPC_CT32B1->MR3 = 1999;
+  LPC_CT16B0->MR3 = 1999;
+  LPC_CT16B1->MR3 = 1999;
+
+  //set the prescaler
+  LPC_CT32B0->PR = 719;
+  LPC_CT32B1->PR = 719;
+  LPC_CT16B0->PR = 719;
+  LPC_CT16B1->PR = 719;
+
+  LPC_CT32B0->PWMC |= (1 << PWMEN0) |
+    (1 << PWMEN1) |
+    (1 << PWMEN2);
+  LPC_CT32B1->PWMC |= (1 << PWMEN0) |
+    (1 << PWMEN1) |
+    (1 << PWMEN2);
+  LPC_CT16B0->PWMC |= (1 << PWMEN0) |
+    (1 << PWMEN1) |
+    (1 << PWMEN2);
+  LPC_CT16B1->PWMC |= (1 << PWMEN0) |
+    (1 << PWMEN1) |
+    (1 << PWMEN2);
+
+  LPC_CT32B0->TCR = 1;
+  LPC_CT32B1->TCR = 1;
+  LPC_CT16B0->TCR = 1;
+  LPC_CT16B1->TCR = 1;
+
+  /**************************************************************************/
+  /*
    * USB SETUP
    */
   /**************************************************************************/
@@ -230,19 +282,6 @@ void boardInit(void)
   usb_init();
 #endif
 #endif
-
-
-  /**************************************************************************/
-  /*
-   * ADC SETUP
-   */
-  /**************************************************************************/
-
-  //LPC_IOCON->TDI_PIO0_11   &= ~0x9F;
-  //LPC_IOCON->TDI_PIO0_11  |= 0x02;
-
-
-  //adcInit();
 
   /**************************************************************************/
   /*

@@ -2,6 +2,7 @@
 
 #ifdef CFG_BRD_DRONE
 
+//Pin Defines
 #define ADC_LPWRMODE 22
 #define AD0 0
 #define AD0_CLKDIV 8
@@ -25,13 +26,13 @@
 #define PINMODE_AD0 0x02
 #define RESET_MR3 10
 
+//Filter Defines
 #define FIL_ALPHA 0.98
-
 #define DELTA_TIME 0.010
 
+//Serial Defines
 #define BAUDRATE 115200
-
-#define SERIAL_DEBUG
+//#define SERIAL_DEBUG
 
 //PWM defines
 #define PWMEN0 0
@@ -44,10 +45,9 @@
 #define PINMODE_CT32B0_MAT0 0x21
 #define PINMODE_CT32B1_MAT0 0xa3
 
-//TODO
-#define PRESCALER
-#define ZERO_MOTOR_SPEED
-#define PERIOD_MATCH
+#define PRESCALER 719
+#define ZERO_MOTOR_SPEED 1900
+#define PERIOD_MATCH 1999
 
 #include <string.h> /* strlen */
 #include <math.h>
@@ -73,32 +73,37 @@
   #endif
 #endif
 
+/**************************************************************************/
+/* VARIABLE DEFINITIONS */
+/**************************************************************************/
 typedef struct copter_t {
   float roll;
   float pitch;
   float yaw;
 } copter_t;
 
-uint32_t duty = 1900;
-volatile uint32_t tick = 0;
+enum states_t {OFF, RUNNING, UPDATING};
+/**************************************************************************/
+/* GLOBAL VARIABLES */
+/**************************************************************************/
 
 volatile copter_t quad_copter = {0};
 volatile gyro_data_t gyro_data = {0};
 volatile accel_data_t accel_data = {0};
+volatile
 
+/**************************************************************************/
+/* FUNCTION PROTOTYPES */
+/**************************************************************************/
 void boardInit(void);
-
 void _delay_ms (uint16_t ms);
-/**************************************************************************/
-/*
- * SYSTICK HANDLER
- */
-/**************************************************************************/
 
+/**************************************************************************/
+/* SYSTICK HANDLER */
+/**************************************************************************/
 void SysTick_Handler(void) {
-  //time it using oscope
-  //LPC_GPIO->NOT[PORT0] |= (1 << P0_8);
   //integrate gyro data for angle
+  /*
   gyro_data.yaw += (gyro_data.raw_yaw_dot/GYRO_SCALING) * DELTA_TIME;
 
   accel_data.xg = accel_data.raw_x * ACCEL_SCALING;
@@ -122,14 +127,18 @@ void SysTick_Handler(void) {
     (1-FIL_ALPHA) * accel_data.pitch;
 
   quad_copter.yaw = gyro_data.yaw;
+  */
 }
 
+/**************************************************************************/
+/* MAIN */
 /**************************************************************************/
 int main(void) {
   uint8_t input_byte = 0;
 
-  /* configure the HW */
+  // configure the HW
   boardInit();
+  /*
   initAccel();
   initGyro();
 
@@ -144,10 +153,16 @@ int main(void) {
   _delay_ms(1000);
   uartSend((uint8_t *)AT_CREAT_SERVER, strlen(AT_CREAT_SERVER));
   _delay_ms(1000);
+  */
 
   //main loop
   for (;;) {
 
+    LPC_GPIO->B0[P0_7] = 0;
+    _delay_ms(1000);
+    LPC_GPIO->B0[P0_7] = 1;
+    _delay_ms(1000);
+    /*
     readGyro(&gyro_data);
     readAccel(&accel_data);
 
@@ -162,6 +177,7 @@ int main(void) {
     if (uartRxBufferDataPending()) {
       input_byte = uartRxBufferRead();
     }
+    */
 
 #ifdef SERIAL_DEBUG
     printf("%f %f %f\n",
@@ -185,31 +201,25 @@ void _delay_ms (uint16_t ms)
 }
 
 /**************************************************************************/
-/*!
-  Board-specific initialisation function
-  */
+/* BOARD INIT*/
 /**************************************************************************/
 void boardInit(void)
 {
   SystemCoreClockUpdate();
 
   /**************************************************************************/
-  /*
-   * GPIO SETUP
-   */
+  /* GPIO SETUP */
   /**************************************************************************/
 
   GPIOInit();
 
   LPC_GPIO->DIR[PORT0] |= (1 << P0_7);
-  LPC_GPIO->DIR[PORT0] |= (1 << P0_8);
+  //LPC_GPIO->DIR[PORT0] |= (1 << P0_8);
   LPC_GPIO->DIR[PORT0] &= ~(1 << P0_17); //set to inputs
   LPC_GPIO->DIR[PORT0] &= ~(1 << P0_16);
 
   /**************************************************************************/
-  /*
-   * PWM SETUP
-   */
+  /* PWM SETUP */
   /**************************************************************************/
   //enable counters and io control block
   LPC_SYSCON->SYSAHBCLKCTRL |= (1 << SYSCLK_IOCON)  |
@@ -234,22 +244,22 @@ void boardInit(void)
 
   //PWM freq = (sys_clock/prescaler)/tick_match
   //set the duty cycle
-  LPC_CT32B0->MR0 = duty;
-  LPC_CT32B1->MR0 = duty;
-  LPC_CT16B0->MR0 = duty;
-  LPC_CT16B1->MR0 = duty;
+  LPC_CT32B0->MR0 = ZERO_MOTOR_SPEED;
+  LPC_CT32B1->MR0 = ZERO_MOTOR_SPEED;
+  LPC_CT16B0->MR0 = ZERO_MOTOR_SPEED;
+  LPC_CT16B1->MR0 = ZERO_MOTOR_SPEED;
 
   //set the period -> timer will be reset when it hits this value
-  LPC_CT32B0->MR3 = 1999; //set the pwm freq to 50hz 
-  LPC_CT32B1->MR3 = 1999;
-  LPC_CT16B0->MR3 = 1999;
-  LPC_CT16B1->MR3 = 1999;
+  LPC_CT32B0->MR3 = PERIOD_MATCH; //set the pwm freq to 50hz 
+  LPC_CT32B1->MR3 = PERIOD_MATCH;
+  LPC_CT16B0->MR3 = PERIOD_MATCH;
+  LPC_CT16B1->MR3 = PERIOD_MATCH;
 
   //set the prescaler
-  LPC_CT32B0->PR = 719;
-  LPC_CT32B1->PR = 719;
-  LPC_CT16B0->PR = 719;
-  LPC_CT16B1->PR = 719;
+  LPC_CT32B0->PR = PRESCALER;
+  LPC_CT32B1->PR = PRESCALER;
+  LPC_CT16B0->PR = PRESCALER;
+  LPC_CT16B1->PR = PRESCALER;
 
   LPC_CT32B0->PWMC |= (1 << PWMEN0) |
     (1 << PWMEN1) |
@@ -270,9 +280,7 @@ void boardInit(void)
   LPC_CT16B1->TCR = 1;
 
   /**************************************************************************/
-  /*
-   * USB SETUP
-   */
+  /* USB SETUP */
   /**************************************************************************/
 
   /* Initialise USB */
@@ -284,9 +292,7 @@ void boardInit(void)
 #endif
 
   /**************************************************************************/
-  /*
-   * SYSTICK SETUP
-   */
+  /* SYSTICK SETUP */
   /**************************************************************************/
 
   // Initialize systick interrupt to 10 ms 100 hz
@@ -294,17 +300,13 @@ void boardInit(void)
   SysTick->LOAD = 0x000afc7f; //freq  = (system clk * desired interval) - 1
 
   /**************************************************************************/
-  /*
-   * I2C SETUP
-   */
+  /* I2C SETUP */
   /**************************************************************************/
 
   i2cInit(I2CMASTER);
 
   /**************************************************************************/
-  /*
-   * UART SETUP
-   */
+  /* UART SETUP */
   /**************************************************************************/
 
   uartInit(BAUDRATE);

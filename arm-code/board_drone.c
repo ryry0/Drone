@@ -32,7 +32,7 @@
 
 //Serial Defines
 #define BAUDRATE 115200
-//#define SERIAL_DEBUG
+#define SERIAL_DEBUG
 
 //PWM defines
 #define PWMEN0 0
@@ -49,8 +49,12 @@
 #define ZERO_MOTOR_SPEED 1900
 #define PERIOD_MATCH 1999
 
+//just assume always get packet of length x
+#define PACKET_LENGTH 12
+
 #include <string.h> /* strlen */
 #include <math.h>
+#include <stdbool.h>
 
 #include "boards/board.h"
 #include "core/gpio/gpio.h"
@@ -76,13 +80,24 @@
 /**************************************************************************/
 /* VARIABLE DEFINITIONS */
 /**************************************************************************/
-typedef struct copter_t {
+typedef struct copter_t { //current actual values for quadcopter
   float roll;
   float pitch;
   float yaw;
 } copter_t;
 
-enum states_t {OFF, RUNNING, UPDATING};
+typedef union copter_setpoints_t { //setpoints for PID algo
+  struct {
+    float set_roll;
+    float set_pitch;
+    float set_yaw;
+  };
+  uint8_t data[12];
+} copter_setpoints_t;
+
+typedef enum states_t {OFF, RUNNING} states_t;
+typedef enum input_states_t {WAITING, UPDATING} input_states_t;
+
 /**************************************************************************/
 /* GLOBAL VARIABLES */
 /**************************************************************************/
@@ -90,7 +105,6 @@ enum states_t {OFF, RUNNING, UPDATING};
 volatile copter_t quad_copter = {0};
 volatile gyro_data_t gyro_data = {0};
 volatile accel_data_t accel_data = {0};
-volatile
 
 /**************************************************************************/
 /* FUNCTION PROTOTYPES */
@@ -128,22 +142,29 @@ void SysTick_Handler(void) {
 
   quad_copter.yaw = gyro_data.yaw;
   */
-}
+} //end SysTick_Handler
 
 /**************************************************************************/
 /* MAIN */
 /**************************************************************************/
 int main(void) {
+  states_t state = OFF;
+  input_states_t input_state = WAITING;
+
+  int8_t packet_index = 0;
   uint8_t input_byte = 0;
+  //int8_t input_buff[PACKET_LENGTH] = {0};
+  bool input_updated = false;
+  copter_setpoints_t copter_setpoints;
 
   // configure the HW
   boardInit();
   /*
   initAccel();
   initGyro();
-
   calibrateAccel(&accel_data);
   calibrateGyro(&gyro_data);
+  */
 
   uartSend((uint8_t *)AT_RESET, strlen(AT_RESET));
   uartSend((uint8_t *)AT_STATION, strlen(AT_STATION));
@@ -153,42 +174,102 @@ int main(void) {
   _delay_ms(1000);
   uartSend((uint8_t *)AT_CREAT_SERVER, strlen(AT_CREAT_SERVER));
   _delay_ms(1000);
-  */
+
+  LPC_GPIO->B0[P0_7] = 1;
 
   //main loop
   for (;;) {
 
-    LPC_GPIO->B0[P0_7] = 0;
-    _delay_ms(1000);
-    LPC_GPIO->B0[P0_7] = 1;
-    _delay_ms(1000);
-    /*
-    readGyro(&gyro_data);
-    readAccel(&accel_data);
+    switch(state) {
+      case OFF:
+        /*
+           LPC_CT32B0->MR0 = ZERO_MOTOR_SPEED;
+           LPC_CT32B1->MR0 = ZERO_MOTOR_SPEED;
+           LPC_CT16B0->MR0 = ZERO_MOTOR_SPEED;
+           LPC_CT16B1->MR0 = ZERO_MOTOR_SPEED;
+           */
 
-    //clear gyro values
-    if (LPC_GPIO->B0[P0_17] == 0) {
-      gyro_data.roll = 0;
-      gyro_data.pitch = 0;
-      gyro_data.yaw = 0;
+        if (LPC_GPIO->B0[P0_17] == 0) {
+          while (LPC_GPIO->B0[P0_17] == 0);
+          sendWifiCommand(AT_GET_IP);
+        }
+
+        if (LPC_GPIO->B0[P0_16] == 0) {
+          while (LPC_GPIO->B0[P0_16] == 0);
+          state = RUNNING;
+        }
+        break;
+
+      case RUNNING:
+        /*
+           readGyro(&gyro_data);
+           readAccel(&accel_data);
+
+        //clear gyro values
+        if (LPC_GPIO->B0[P0_17] == 0) {
+        gyro_data.roll = 0;
+        gyro_data.pitch = 0;
+        gyro_data.yaw = 0;
+        }
+        */
+
+        switch(input_state) {
+          case WAITING:
+            if (input_byte == ':') {
+              input_state = UPDATING;
+              input_updated = false;
+            }
+            break;
+
+          case UPDATING:
+            if (input_updated) {
+              copter_setpoints.data[packet_index++] = input_byte;
+
+              printf("packet index: %d %d\n", packet_index, (int) input_byte);
+
+              if (packet_index >= PACKET_LENGTH) {
+                input_state = UPDATING;
+                packet_index = 0;
+
+#ifdef SERIAL_DEBUG
+                printf("\n%f %f %f\n", copter_setpoints.set_roll,
+                    copter_setpoints.set_pitch,
+                    copter_setpoints.set_yaw);
+#endif
+                //update actual setpoints here since it will be used in interrupt
+              }
+              input_updated = false;
+            }
+            break;
+        }
+
+        break; //end RUNNING
+
+      default:
+        break;
     }
+
 
     //flush the read buffer
     if (uartRxBufferDataPending()) {
       input_byte = uartRxBufferRead();
+      input_updated = true;
+#ifdef SERIAL_DEBUG
+      printf("%c", (char) input_byte);
+#endif
     }
-    */
 
 #ifdef SERIAL_DEBUG
-    printf("%f %f %f\n",
-        quad_copter.roll, quad_copter.pitch, quad_copter.yaw);
-
-    printf("%c", (char) input_byte);
+    //printf("%f %f %f\n",
+    //quad_copter.roll, quad_copter.pitch, quad_copter.yaw);
 #endif
 
   } //end for(;;)
 } //end main
 
+/**************************************************************************/
+/* DELAY MS */
+/**************************************************************************/
 //crappy delay but I need to use systick and counter interrupts
 void _delay_ms (uint16_t ms)
 {
@@ -201,7 +282,7 @@ void _delay_ms (uint16_t ms)
 }
 
 /**************************************************************************/
-/* BOARD INIT*/
+/* BOARD INIT */
 /**************************************************************************/
 void boardInit(void)
 {
@@ -217,6 +298,7 @@ void boardInit(void)
   //LPC_GPIO->DIR[PORT0] |= (1 << P0_8);
   LPC_GPIO->DIR[PORT0] &= ~(1 << P0_17); //set to inputs
   LPC_GPIO->DIR[PORT0] &= ~(1 << P0_16);
+  LPC_GPIO->B0[P0_7] = 0; //turn off led until initialized
 
   /**************************************************************************/
   /* PWM SETUP */
@@ -250,7 +332,7 @@ void boardInit(void)
   LPC_CT16B1->MR0 = ZERO_MOTOR_SPEED;
 
   //set the period -> timer will be reset when it hits this value
-  LPC_CT32B0->MR3 = PERIOD_MATCH; //set the pwm freq to 50hz 
+  LPC_CT32B0->MR3 = PERIOD_MATCH; //set the pwm freq to 50hz
   LPC_CT32B1->MR3 = PERIOD_MATCH;
   LPC_CT16B0->MR3 = PERIOD_MATCH;
   LPC_CT16B1->MR3 = PERIOD_MATCH;

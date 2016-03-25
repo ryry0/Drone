@@ -57,7 +57,7 @@
 #define BR_ROTOR LPC_CT16B1
 
 //just assume always get packet of length x
-#define PACKET_LENGTH 12
+#define PACKET_LENGTH 13
 
 #include <string.h> /* strlen */
 #include <math.h>
@@ -98,8 +98,9 @@ typedef union copter_setpoints_t { //setpoints for PID algo
     float set_roll;
     float set_pitch;
     float set_yaw;
+    uint8_t throttle;
   };
-  uint8_t data[12];
+  uint8_t data[PACKET_LENGTH];
 } copter_setpoints_t;
 
 typedef enum states_t {OFF, RUNNING} states_t;
@@ -203,35 +204,42 @@ int main(void) {
 
         if (LPC_GPIO->B0[P0_16] == 0) {
           while (LPC_GPIO->B0[P0_16] == 0);
-          //state = RUNNING;
+          state = RUNNING;
+          printf("Copter in flight mode.\n");
 
-           FL_ROTOR->MR0 = TOP_MOTOR_SPEED;
-           _delay_ms(2000);
-           FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+          /*
+             FL_ROTOR->MR0 = TOP_MOTOR_SPEED;
+             _delay_ms(2000);
+             FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
 
-           FR_ROTOR->MR0 = TOP_MOTOR_SPEED;
-           _delay_ms(2000);
-           FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+             FR_ROTOR->MR0 = TOP_MOTOR_SPEED;
+             _delay_ms(2000);
+             FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
 
-           BR_ROTOR->MR0 = TOP_MOTOR_SPEED;
-           _delay_ms(2000);
-           BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+             BR_ROTOR->MR0 = TOP_MOTOR_SPEED;
+             _delay_ms(2000);
+             BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
 
-           BL_ROTOR->MR0 = TOP_MOTOR_SPEED;
-           _delay_ms(2000);
-           BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+             BL_ROTOR->MR0 = TOP_MOTOR_SPEED;
+             _delay_ms(2000);
+             BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
 
-           FL_ROTOR->MR0 = TOP_MOTOR_SPEED;
-           FR_ROTOR->MR0 = TOP_MOTOR_SPEED;
-           BR_ROTOR->MR0 = TOP_MOTOR_SPEED;
-           BL_ROTOR->MR0 = TOP_MOTOR_SPEED;
-           _delay_ms(2000);
-           BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-           FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-           FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-           BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+             FL_ROTOR->MR0 = TOP_MOTOR_SPEED;
+             FR_ROTOR->MR0 = TOP_MOTOR_SPEED;
+             BR_ROTOR->MR0 = TOP_MOTOR_SPEED;
+             BL_ROTOR->MR0 = TOP_MOTOR_SPEED;
+             _delay_ms(2000);
+             BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+             FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+             FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+             BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+             */
         }
 
+        if (input_updated) {
+          printf("%c", (char) input_byte);
+          input_updated = false;
+        }
         break;
 
       case RUNNING:
@@ -259,24 +267,28 @@ int main(void) {
             if (input_updated) {
               copter_setpoints.data[packet_index++] = input_byte;
 
-              printf("packet index: %d %d\n", packet_index, (int) input_byte);
+              //printf("packet index: %d %d\n", packet_index, (int) input_byte);
 
               if (packet_index >= PACKET_LENGTH) {
                 input_state = WAITING;
                 packet_index = 0;
 
 #ifdef SERIAL_DEBUG
-                printf("\n%f %f %f\n", copter_setpoints.set_roll,
-                    copter_setpoints.set_pitch,
-                    copter_setpoints.set_yaw);
+                //printf("\n%f %f %f %d\n", copter_setpoints.set_roll,
+                //copter_setpoints.set_pitch,
+                //copter_setpoints.set_yaw, copter_setpoints.throttle);
 #endif
                 //update actual setpoints here since it will be used in interrupt
               }
               input_updated = false;
             }
             break;
-        }
+        } //end input state machine
 
+        FL_ROTOR->MR0 = ZERO_MOTOR_SPEED - copter_setpoints.throttle;
+        FR_ROTOR->MR0 = ZERO_MOTOR_SPEED - copter_setpoints.throttle;
+        BR_ROTOR->MR0 = ZERO_MOTOR_SPEED - copter_setpoints.throttle;
+        BL_ROTOR->MR0 = ZERO_MOTOR_SPEED - copter_setpoints.throttle;
         break; //end RUNNING
 
       default:
@@ -289,7 +301,7 @@ int main(void) {
       input_byte = uartRxBufferRead();
       input_updated = true;
 #ifdef SERIAL_DEBUG
-      printf("%c", (char) input_byte);
+      //printf("%c", (char) input_byte);
 #endif
     }
 

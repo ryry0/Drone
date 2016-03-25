@@ -47,7 +47,14 @@
 
 #define PRESCALER 719
 #define ZERO_MOTOR_SPEED 1900
+#define TOP_MOTOR_SPEED 1800
 #define PERIOD_MATCH 1999
+
+//rotor defines
+#define FL_ROTOR LPC_CT16B0
+#define FR_ROTOR LPC_CT32B1
+#define BL_ROTOR LPC_CT32B0
+#define BR_ROTOR LPC_CT16B1
 
 //just assume always get packet of length x
 #define PACKET_LENGTH 12
@@ -196,8 +203,35 @@ int main(void) {
 
         if (LPC_GPIO->B0[P0_16] == 0) {
           while (LPC_GPIO->B0[P0_16] == 0);
-          state = RUNNING;
+          //state = RUNNING;
+
+           FL_ROTOR->MR0 = TOP_MOTOR_SPEED;
+           _delay_ms(2000);
+           FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+
+           FR_ROTOR->MR0 = TOP_MOTOR_SPEED;
+           _delay_ms(2000);
+           FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+
+           BR_ROTOR->MR0 = TOP_MOTOR_SPEED;
+           _delay_ms(2000);
+           BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+
+           BL_ROTOR->MR0 = TOP_MOTOR_SPEED;
+           _delay_ms(2000);
+           BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+
+           FL_ROTOR->MR0 = TOP_MOTOR_SPEED;
+           FR_ROTOR->MR0 = TOP_MOTOR_SPEED;
+           BR_ROTOR->MR0 = TOP_MOTOR_SPEED;
+           BL_ROTOR->MR0 = TOP_MOTOR_SPEED;
+           _delay_ms(2000);
+           BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+           FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+           FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+           BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
         }
+
         break;
 
       case RUNNING:
@@ -228,7 +262,7 @@ int main(void) {
               printf("packet index: %d %d\n", packet_index, (int) input_byte);
 
               if (packet_index >= PACKET_LENGTH) {
-                input_state = UPDATING;
+                input_state = WAITING;
                 packet_index = 0;
 
 #ifdef SERIAL_DEBUG

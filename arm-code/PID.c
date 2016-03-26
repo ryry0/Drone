@@ -1,6 +1,5 @@
 #include <PID.h>
 
-#define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 
 void setPIDConstants(pid_data_t *pid, const float proportional_gain,
                      const float integral_gain, const float derivative_gain,

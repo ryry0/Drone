@@ -28,7 +28,7 @@
 
 //Filter Defines
 #define FIL_ALPHA 0.98
-#define DELTA_TIME 0.010
+#define DELTA_TIME 0.002
 
 //Serial Defines
 #define BAUDRATE 115200
@@ -56,8 +56,28 @@
 #define BL_ROTOR LPC_CT32B0
 #define BR_ROTOR LPC_CT16B1
 
+//PID defines
+#define NUM_AXES 3
+#define ROLL_AXIS 0
+#define PITCH_AXIS 1
+#define YAW_AXIS 2
+
+#define ROLL_P 1.0
+#define ROLL_I 0.0
+#define ROLL_D 0.0
+
+#define PITCH_P 1.0
+#define PITCH_I 0.0
+#define PITCH_D 0.0
+
+#define YAW_P 1.0
+#define YAW_I 0.0
+#define YAW_D 0.0
+
+#define INTEGRAL_GUARD 1000
+
 //just assume always get packet of length x
-#define PACKET_LENGTH 13
+#define PACKET_LENGTH 22
 
 #include <string.h> /* strlen */
 #include <math.h>
@@ -74,6 +94,7 @@
 #include "lpc_gyro.h"
 #include "lpc_accel.h"
 #include "lpc_wifi.h"
+#include "PID.h"
 
 #ifdef SERIAL_DEBUG
   #ifdef CFG_USB
@@ -87,17 +108,28 @@
 /**************************************************************************/
 /* VARIABLE DEFINITIONS */
 /**************************************************************************/
-typedef struct copter_t { //current actual values for quadcopter
-  float roll;
-  float pitch;
-  float yaw;
+typedef union copter_t { //current actual values for quadcopter
+  struct {
+    float roll;
+    float pitch;
+    float yaw_dot;
+  };
+  float angles[NUM_AXES];
 } copter_t;
 
 typedef union copter_setpoints_t { //setpoints for PID algo
   struct {
-    float set_roll;
-    float set_pitch;
-    float set_yaw;
+    union {
+      struct {
+        float set_roll;
+        float set_pitch;
+        float set_yaw_dot;
+      };
+      float set_angles[NUM_AXES];
+    };
+    float P;
+    float I;
+    uint8_t hard_kill;
     uint8_t throttle;
   };
   uint8_t data[PACKET_LENGTH];
@@ -114,6 +146,12 @@ volatile copter_t quad_copter = {0};
 volatile gyro_data_t gyro_data = {0};
 volatile accel_data_t accel_data = {0};
 
+copter_setpoints_t copter_setpoints = {0}; //set points received from network
+volatile bool setpoints_updated = false; //"mutex" for setpoints
+volatile float current_error = 0;
+
+pid_data_t angle_pids[NUM_AXES] = {0};
+
 /**************************************************************************/
 /* FUNCTION PROTOTYPES */
 /**************************************************************************/
@@ -124,22 +162,36 @@ void _delay_ms (uint16_t ms);
 /* SYSTICK HANDLER */
 /**************************************************************************/
 void SysTick_Handler(void) {
+  static copter_setpoints_t local_setpoints = {0};
+
+  //LPC_GPIO->B0[P0_7] = 1;
+
+  if (setpoints_updated) {
+    local_setpoints = copter_setpoints;
+
+    angle_pids[ROLL_AXIS].proportional_gain = local_setpoints.P;
+    angle_pids[ROLL_AXIS].integral_gain = local_setpoints.I;
+
+    setpoints_updated = false;
+  }
+
   //integrate gyro data for angle
   /*
   gyro_data.yaw += (gyro_data.raw_yaw_dot/GYRO_SCALING) * DELTA_TIME;
+  */
 
   accel_data.xg = accel_data.raw_x * ACCEL_SCALING;
   accel_data.yg = accel_data.raw_y * ACCEL_SCALING;
   accel_data.zg = accel_data.raw_z * ACCEL_SCALING;
 
-  //get position from z facing down (probs need to change)
+  //derive angle from accelerometer
   accel_data.roll = atan2(accel_data.yg, accel_data.zg)* 180/M_PI;
 
   accel_data.pitch = atan2(-accel_data.xg,
       sqrt(accel_data.yg*accel_data.yg + accel_data.zg*accel_data.zg))*
     180/M_PI;
 
-  //complementary filter
+  //run complementary filter
   quad_copter.roll = FIL_ALPHA *
     (quad_copter.roll + ((gyro_data.raw_roll_dot/GYRO_SCALING)*DELTA_TIME)) +
     (1-FIL_ALPHA) * accel_data.roll;
@@ -148,8 +200,30 @@ void SysTick_Handler(void) {
     (quad_copter.pitch + ((gyro_data.raw_pitch_dot/GYRO_SCALING)*DELTA_TIME)) +
     (1-FIL_ALPHA) * accel_data.pitch;
 
-  quad_copter.yaw = gyro_data.yaw;
-  */
+  for (uint8_t i = 0; i < NUM_AXES; i++) {
+    current_error = local_setpoints.set_angles[i] - quad_copter.angles[i];
+    fixedUpdatePID(&angle_pids[i], &current_error);
+    //angle_pids[i].pid_output = constrain(angle_pids[i].pid_output, 0, 100);
+  }
+
+  FL_ROTOR->MR0 = ZERO_MOTOR_SPEED -
+    constrain((-angle_pids[ROLL_AXIS].pid_output + local_setpoints.throttle),
+        -100, 100);
+
+  FR_ROTOR->MR0 = ZERO_MOTOR_SPEED -
+    constrain((-angle_pids[ROLL_AXIS].pid_output +local_setpoints.throttle),
+        -100, 100);
+
+  BR_ROTOR->MR0 = ZERO_MOTOR_SPEED -
+    constrain((angle_pids[ROLL_AXIS].pid_output + local_setpoints.throttle),
+        -100, 100);
+
+  BL_ROTOR->MR0 = ZERO_MOTOR_SPEED -
+    constrain((angle_pids[ROLL_AXIS].pid_output + local_setpoints.throttle),
+        -100, 100);
+
+  //LPC_GPIO->B0[P0_7] = 0;
+
 } //end SysTick_Handler
 
 /**************************************************************************/
@@ -161,18 +235,14 @@ int main(void) {
 
   int8_t packet_index = 0;
   uint8_t input_byte = 0;
-  //int8_t input_buff[PACKET_LENGTH] = {0};
   bool input_updated = false;
-  copter_setpoints_t copter_setpoints;
 
   // configure the HW
   boardInit();
-  /*
   initAccel();
   initGyro();
   calibrateAccel(&accel_data);
   calibrateGyro(&gyro_data);
-  */
 
   uartSend((uint8_t *)AT_RESET, strlen(AT_RESET));
   uartSend((uint8_t *)AT_STATION, strlen(AT_STATION));
@@ -190,12 +260,10 @@ int main(void) {
 
     switch(state) {
       case OFF:
-        /*
-           LPC_CT32B0->MR0 = ZERO_MOTOR_SPEED;
-           LPC_CT32B1->MR0 = ZERO_MOTOR_SPEED;
-           LPC_CT16B0->MR0 = ZERO_MOTOR_SPEED;
-           LPC_CT16B1->MR0 = ZERO_MOTOR_SPEED;
-           */
+        FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
 
         if (LPC_GPIO->B0[P0_17] == 0) {
           while (LPC_GPIO->B0[P0_17] == 0);
@@ -204,36 +272,8 @@ int main(void) {
 
         if (LPC_GPIO->B0[P0_16] == 0) {
           while (LPC_GPIO->B0[P0_16] == 0);
-          state = RUNNING;
           printf("Copter in flight mode.\n");
-
-          /*
-             FL_ROTOR->MR0 = TOP_MOTOR_SPEED;
-             _delay_ms(2000);
-             FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-
-             FR_ROTOR->MR0 = TOP_MOTOR_SPEED;
-             _delay_ms(2000);
-             FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-
-             BR_ROTOR->MR0 = TOP_MOTOR_SPEED;
-             _delay_ms(2000);
-             BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-
-             BL_ROTOR->MR0 = TOP_MOTOR_SPEED;
-             _delay_ms(2000);
-             BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-
-             FL_ROTOR->MR0 = TOP_MOTOR_SPEED;
-             FR_ROTOR->MR0 = TOP_MOTOR_SPEED;
-             BR_ROTOR->MR0 = TOP_MOTOR_SPEED;
-             BL_ROTOR->MR0 = TOP_MOTOR_SPEED;
-             _delay_ms(2000);
-             BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-             FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-             FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-             BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-             */
+          state = RUNNING;
         }
 
         if (input_updated) {
@@ -243,17 +283,15 @@ int main(void) {
         break;
 
       case RUNNING:
-        /*
-           readGyro(&gyro_data);
-           readAccel(&accel_data);
+        readGyro(&gyro_data);
+        readAccel(&accel_data);
 
         //clear gyro values
         if (LPC_GPIO->B0[P0_17] == 0) {
-        gyro_data.roll = 0;
-        gyro_data.pitch = 0;
-        gyro_data.yaw = 0;
+          gyro_data.roll = 0;
+          gyro_data.pitch = 0;
+          gyro_data.yaw = 0;
         }
-        */
 
         switch(input_state) {
           case WAITING:
@@ -267,28 +305,21 @@ int main(void) {
             if (input_updated) {
               copter_setpoints.data[packet_index++] = input_byte;
 
-              //printf("packet index: %d %d\n", packet_index, (int) input_byte);
-
               if (packet_index >= PACKET_LENGTH) {
                 input_state = WAITING;
                 packet_index = 0;
-
-#ifdef SERIAL_DEBUG
-                //printf("\n%f %f %f %d\n", copter_setpoints.set_roll,
-                //copter_setpoints.set_pitch,
-                //copter_setpoints.set_yaw, copter_setpoints.throttle);
-#endif
-                //update actual setpoints here since it will be used in interrupt
+                setpoints_updated = true;
               }
               input_updated = false;
             }
             break;
         } //end input state machine
 
-        FL_ROTOR->MR0 = ZERO_MOTOR_SPEED - copter_setpoints.throttle;
-        FR_ROTOR->MR0 = ZERO_MOTOR_SPEED - copter_setpoints.throttle;
-        BR_ROTOR->MR0 = ZERO_MOTOR_SPEED - copter_setpoints.throttle;
-        BL_ROTOR->MR0 = ZERO_MOTOR_SPEED - copter_setpoints.throttle;
+        if (copter_setpoints.hard_kill == 1)
+          state = OFF;
+
+        //printf("%f %f\n", current_error,
+            //angle_pids[ROLL_AXIS].pid_output);
         break; //end RUNNING
 
       default:
@@ -425,7 +456,7 @@ void boardInit(void)
 
   // Initialize systick interrupt to 10 ms 100 hz
   SysTick->CTRL = 0x07;
-  SysTick->LOAD = 0x000afc7f; //freq  = (system clk * desired interval) - 1
+  SysTick->LOAD = 0x0002327f; //freq  = (system clk * desired interval) - 1
 
   /**************************************************************************/
   /* I2C SETUP */
@@ -438,6 +469,14 @@ void boardInit(void)
   /**************************************************************************/
 
   uartInit(BAUDRATE);
+
+  /**************************************************************************/
+  /* PID SETUP */
+  /**************************************************************************/
+
+  setPIDConstants(&angle_pids[0], ROLL_P, ROLL_I, ROLL_D, INTEGRAL_GUARD);
+  setPIDConstants(&angle_pids[1], PITCH_P, PITCH_I, PITCH_D, INTEGRAL_GUARD);
+  setPIDConstants(&angle_pids[2], YAW_P, YAW_I, YAW_D, INTEGRAL_GUARD);
 } //boardInit
 
 #endif /* CFG_BRD_LPCXPRESSO_LPC1347 */

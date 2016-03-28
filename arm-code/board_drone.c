@@ -27,7 +27,7 @@
 #define RESET_MR3 10
 
 //Filter Defines
-#define FIL_ALPHA 0.98
+#define FIL_ALPHA 0.995
 #define DELTA_TIME 0.002
 
 //Serial Defines
@@ -58,6 +58,7 @@
 
 //PID defines
 #define NUM_AXES 3
+
 #define ROLL_AXIS 0
 #define PITCH_AXIS 1
 #define YAW_AXIS 2
@@ -172,13 +173,16 @@ void SysTick_Handler(void) {
     angle_pids[ROLL_AXIS].proportional_gain = local_setpoints.P;
     angle_pids[ROLL_AXIS].integral_gain = local_setpoints.I;
 
+    angle_pids[PITCH_AXIS].proportional_gain = local_setpoints.P;
+    angle_pids[PITCH_AXIS].integral_gain = local_setpoints.I;
+
     setpoints_updated = false;
   }
 
   //integrate gyro data for angle
   /*
-  gyro_data.yaw += (gyro_data.raw_yaw_dot/GYRO_SCALING) * DELTA_TIME;
-  */
+     gyro_data.yaw += (gyro_data.raw_yaw_dot/GYRO_SCALING) * DELTA_TIME;
+     */
 
   accel_data.xg = accel_data.raw_x * ACCEL_SCALING;
   accel_data.yg = accel_data.raw_y * ACCEL_SCALING;
@@ -200,6 +204,7 @@ void SysTick_Handler(void) {
     (quad_copter.pitch + ((gyro_data.raw_pitch_dot/GYRO_SCALING)*DELTA_TIME)) +
     (1-FIL_ALPHA) * accel_data.pitch;
 
+  //run pid algo
   for (uint8_t i = 0; i < NUM_AXES; i++) {
     current_error = local_setpoints.set_angles[i] - quad_copter.angles[i];
     fixedUpdatePID(&angle_pids[i], &current_error);
@@ -207,20 +212,28 @@ void SysTick_Handler(void) {
   }
 
   FL_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((-angle_pids[ROLL_AXIS].pid_output + local_setpoints.throttle),
-        -100, 100);
+    constrain((-angle_pids[ROLL_AXIS].pid_output +
+          -angle_pids[PITCH_AXIS].pid_output +
+          local_setpoints.throttle),
+        0, 100);
 
   FR_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((-angle_pids[ROLL_AXIS].pid_output +local_setpoints.throttle),
-        -100, 100);
+    constrain((-angle_pids[ROLL_AXIS].pid_output +
+          angle_pids[PITCH_AXIS].pid_output +
+          local_setpoints.throttle),
+        0, 100);
 
   BR_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((angle_pids[ROLL_AXIS].pid_output + local_setpoints.throttle),
-        -100, 100);
+    constrain((angle_pids[ROLL_AXIS].pid_output +
+          angle_pids[PITCH_AXIS].pid_output +
+          local_setpoints.throttle),
+        0, 100);
 
   BL_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((angle_pids[ROLL_AXIS].pid_output + local_setpoints.throttle),
-        -100, 100);
+    constrain((angle_pids[ROLL_AXIS].pid_output +
+          -angle_pids[PITCH_AXIS].pid_output +
+          local_setpoints.throttle),
+        0, 100);
 
   //LPC_GPIO->B0[P0_7] = 0;
 
@@ -253,7 +266,10 @@ int main(void) {
   uartSend((uint8_t *)AT_CREAT_SERVER, strlen(AT_CREAT_SERVER));
   _delay_ms(1000);
 
+
   LPC_GPIO->B0[P0_7] = 1;
+  _delay_ms(1000);
+  LPC_GPIO->B0[P0_7] = 0;
 
   //main loop
   for (;;) {
@@ -272,7 +288,8 @@ int main(void) {
 
         if (LPC_GPIO->B0[P0_16] == 0) {
           while (LPC_GPIO->B0[P0_16] == 0);
-          printf("Copter in flight mode.\n");
+          //printf("Copter in flight mode.\n");
+          LPC_GPIO->B0[P0_7] = 1;
           state = RUNNING;
         }
 
@@ -315,8 +332,10 @@ int main(void) {
             break;
         } //end input state machine
 
-        if (copter_setpoints.hard_kill == 1)
+        if (copter_setpoints.hard_kill == 1) {
           state = OFF;
+          LPC_GPIO->B0[P0_7] = 0;
+        }
 
         //printf("%f %f\n", current_error,
             //angle_pids[ROLL_AXIS].pid_output);
@@ -474,9 +493,10 @@ void boardInit(void)
   /* PID SETUP */
   /**************************************************************************/
 
-  setPIDConstants(&angle_pids[0], ROLL_P, ROLL_I, ROLL_D, INTEGRAL_GUARD);
-  setPIDConstants(&angle_pids[1], PITCH_P, PITCH_I, PITCH_D, INTEGRAL_GUARD);
-  setPIDConstants(&angle_pids[2], YAW_P, YAW_I, YAW_D, INTEGRAL_GUARD);
+  setPIDConstants(&angle_pids[ROLL_AXIS], ROLL_P, ROLL_I, ROLL_D, INTEGRAL_GUARD);
+  setPIDConstants(&angle_pids[PITCH_AXIS], PITCH_P, PITCH_I, PITCH_D, 
+      INTEGRAL_GUARD);
+  setPIDConstants(&angle_pids[YAW_AXIS], YAW_P, YAW_I, YAW_D, INTEGRAL_GUARD);
 } //boardInit
 
 #endif /* CFG_BRD_LPCXPRESSO_LPC1347 */

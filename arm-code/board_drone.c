@@ -75,7 +75,7 @@
 #define YAW_I 0.0
 #define YAW_D 0.0
 
-#define INTEGRAL_GUARD 1000
+#define INTEGRAL_GUARD 20
 
 //just assume always get packet of length x
 #define PACKET_LENGTH 22
@@ -150,6 +150,7 @@ volatile accel_data_t accel_data = {0};
 copter_setpoints_t copter_setpoints = {0}; //set points received from network
 volatile bool setpoints_updated = false; //"mutex" for setpoints
 volatile float current_error = 0;
+//volatile uint16_t printf_counter = 0;
 
 pid_data_t angle_pids[NUM_AXES] = {0};
 
@@ -235,6 +236,7 @@ void SysTick_Handler(void) {
           local_setpoints.throttle),
         0, 100);
 
+  //printf_counter ++;
   //LPC_GPIO->B0[P0_7] = 0;
 
 } //end SysTick_Handler
@@ -337,8 +339,8 @@ int main(void) {
           LPC_GPIO->B0[P0_7] = 0;
         }
 
-        //printf("%f %f\n", current_error,
-            //angle_pids[ROLL_AXIS].pid_output);
+        //if ((printf_counter % 50) == 0)
+          //printf("%f %f\n", quad_copter.roll, quad_copter.pitch);
         break; //end RUNNING
 
       default:

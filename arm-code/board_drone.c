@@ -212,6 +212,8 @@ void SysTick_Handler(void) {
   for (uint8_t i = 0; i < NUM_AXES; i++) {
     current_error = local_setpoints.set_angles[i] - quad_copter.angles[i];
     fixedUpdatePID(&angle_pids[i], &current_error);
+    angle_pids[i].pid_output = angle_pids[i].proportional_gain * current_error +
+      angle_pids[i].derivative_gain * gyro_data.angle_dots[i]/GYRO_SCALING;
     //angle_pids[i].pid_output = constrain(angle_pids[i].pid_output, 0, 100);
   }
 

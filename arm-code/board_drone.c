@@ -78,7 +78,7 @@
 #define INTEGRAL_GUARD 20
 
 //just assume always get packet of length x
-#define PACKET_LENGTH 22
+#define PACKET_LENGTH 26
 
 #include <string.h> /* strlen */
 #include <math.h>
@@ -130,6 +130,7 @@ typedef union copter_setpoints_t { //setpoints for PID algo
     };
     float P;
     float I;
+    float D;
     uint8_t hard_kill;
     uint8_t throttle;
   };
@@ -173,9 +174,11 @@ void SysTick_Handler(void) {
 
     angle_pids[ROLL_AXIS].proportional_gain = local_setpoints.P;
     angle_pids[ROLL_AXIS].integral_gain = local_setpoints.I;
+    angle_pids[ROLL_AXIS].derivative_gain = local_setpoints.D;
 
     angle_pids[PITCH_AXIS].proportional_gain = local_setpoints.P;
     angle_pids[PITCH_AXIS].integral_gain = local_setpoints.I;
+    angle_pids[PITCH_AXIS].derivative_gain = local_setpoints.D;
 
     setpoints_updated = false;
   }

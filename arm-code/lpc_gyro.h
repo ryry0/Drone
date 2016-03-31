@@ -26,9 +26,15 @@ typedef struct gyro_data_t {
   int16_t pitch_dot_off;
   int16_t yaw_dot_off;
 
-  int16_t raw_roll_dot;
-  int16_t raw_pitch_dot;
-  int16_t raw_yaw_dot;
+
+  union {
+    struct {
+      int16_t raw_roll_dot;
+      int16_t raw_pitch_dot;
+      int16_t raw_yaw_dot;
+    };
+    int16_t angle_dots[3];
+  };
 } gyro_data_t;
 
 void initGyro(void);

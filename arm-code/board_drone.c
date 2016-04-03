@@ -180,6 +180,10 @@ void SysTick_Handler(void) {
     angle_pids[PITCH_AXIS].integral_gain = local_setpoints.I;
     angle_pids[PITCH_AXIS].derivative_gain = local_setpoints.D;
 
+
+    angle_pids[YAW_AXIS].proportional_gain = local_setpoints.P;
+    angle_pids[YAW_AXIS].integral_gain = local_setpoints.I;
+
     setpoints_updated = false;
   }
 
@@ -208,8 +212,10 @@ void SysTick_Handler(void) {
     (quad_copter.pitch + ((gyro_data.raw_pitch_dot/GYRO_SCALING)*DELTA_TIME)) +
     (1-FIL_ALPHA) * accel_data.pitch;
 
+  quad_copter.yaw_dot = gyro_data.raw_yaw_dot/GYRO_SCALING;
+
   //run pid algo
-  for (uint8_t i = 0; i < NUM_AXES; i++) {
+  for (uint8_t i = 0; i < NUM_AXES - 1; i++) {
     current_error = local_setpoints.set_angles[i] - quad_copter.angles[i];
 
     if (local_setpoints.throttle > 0)
@@ -218,7 +224,7 @@ void SysTick_Handler(void) {
       angle_pids[i].integral_error = 0;
 
     angle_pids[i].integral_error = constrain(angle_pids[i].integral_error,
-    -angle_pids[i].integral_guard, angle_pids[i].integral_guard);
+        -angle_pids[i].integral_guard, angle_pids[i].integral_guard);
 
     angle_pids[i].pid_output = angle_pids[i].proportional_gain * current_error +
       angle_pids[i].integral_gain * angle_pids[i].integral_error +
@@ -227,27 +233,49 @@ void SysTick_Handler(void) {
     //angle_pids[i].pid_output = constrain(angle_pids[i].pid_output, 0, 100);
   }
 
+  current_error = local_setpoints.set_angles[YAW_AXIS] -
+    quad_copter.angles[YAW_AXIS];
+
+  if (local_setpoints.throttle > 0)
+    angle_pids[YAW_AXIS].integral_error += current_error;
+  else
+    angle_pids[YAW_AXIS].integral_error = 0;
+
+  angle_pids[YAW_AXIS].integral_error = constrain(angle_pids[YAW_AXIS].integral_error,
+      -angle_pids[YAW_AXIS].integral_guard, angle_pids[YAW_AXIS].integral_guard);
+
+  angle_pids[YAW_AXIS].pid_output = angle_pids[YAW_AXIS].proportional_gain * current_error +
+    angle_pids[YAW_AXIS].integral_gain * angle_pids[YAW_AXIS].integral_error;// +
+    //angle_pids[YAW_AXIS].derivative_gain * gyro_data.angle_dots[YAW_AXIS]/GYRO_SCALING;
+
+  //angle_pids].pid_output = constrain(angle_pids[i].pid_output, 0, 100);
+
+
   FL_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((-angle_pids[ROLL_AXIS].pid_output +
           -angle_pids[PITCH_AXIS].pid_output +
+          -angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         0, 100);
 
   FR_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((-angle_pids[ROLL_AXIS].pid_output +
           angle_pids[PITCH_AXIS].pid_output +
+          angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         0, 100);
 
   BR_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((angle_pids[ROLL_AXIS].pid_output +
           angle_pids[PITCH_AXIS].pid_output +
+          -angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         0, 100);
 
   BL_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((angle_pids[ROLL_AXIS].pid_output +
           -angle_pids[PITCH_AXIS].pid_output +
+          angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         0, 100);
 
@@ -354,8 +382,8 @@ int main(void) {
           LPC_GPIO->B0[P0_7] = 0;
         }
 
-        //if ((printf_counter % 50) == 0)
-          //printf("%f %f\n", quad_copter.roll, quad_copter.pitch);
+        if ((printf_counter % 50) == 0)
+          printf("%f \n", quad_copter.yaw_dot);
         break; //end RUNNING
 
       default:

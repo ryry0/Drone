@@ -63,19 +63,19 @@
 #define PITCH_AXIS 1
 #define YAW_AXIS 2
 
-#define ROLL_P 1.0
+#define ROLL_P 0.0
 #define ROLL_I 0.0
 #define ROLL_D 0.0
 
-#define PITCH_P 1.0
+#define PITCH_P 0.0
 #define PITCH_I 0.0
 #define PITCH_D 0.0
 
-#define YAW_P 1.0
+#define YAW_P 0.0
 #define YAW_I 0.0
 #define YAW_D 0.0
 
-#define INTEGRAL_GUARD 20
+#define INTEGRAL_GUARD 5000
 
 //just assume always get packet of length x
 #define PACKET_LENGTH 26
@@ -151,7 +151,7 @@ volatile accel_data_t accel_data = {0};
 copter_setpoints_t copter_setpoints = {0}; //set points received from network
 volatile bool setpoints_updated = false; //"mutex" for setpoints
 volatile float current_error = 0;
-//volatile uint16_t printf_counter = 0;
+volatile uint16_t printf_counter = 0;
 
 pid_data_t angle_pids[NUM_AXES] = {0};
 
@@ -211,9 +211,19 @@ void SysTick_Handler(void) {
   //run pid algo
   for (uint8_t i = 0; i < NUM_AXES; i++) {
     current_error = local_setpoints.set_angles[i] - quad_copter.angles[i];
-    fixedUpdatePID(&angle_pids[i], &current_error);
+
+    if (local_setpoints.throttle > 0)
+      angle_pids[i].integral_error += current_error;
+    else
+      angle_pids[i].integral_error = 0;
+
+    angle_pids[i].integral_error = constrain(angle_pids[i].integral_error,
+    -angle_pids[i].integral_guard, angle_pids[i].integral_guard);
+
     angle_pids[i].pid_output = angle_pids[i].proportional_gain * current_error +
+      angle_pids[i].integral_gain * angle_pids[i].integral_error +
       angle_pids[i].derivative_gain * gyro_data.angle_dots[i]/GYRO_SCALING;
+
     //angle_pids[i].pid_output = constrain(angle_pids[i].pid_output, 0, 100);
   }
 
@@ -241,7 +251,7 @@ void SysTick_Handler(void) {
           local_setpoints.throttle),
         0, 100);
 
-  //printf_counter ++;
+  printf_counter ++;
   //LPC_GPIO->B0[P0_7] = 0;
 
 } //end SysTick_Handler
@@ -501,7 +511,7 @@ void boardInit(void)
   /**************************************************************************/
 
   setPIDConstants(&angle_pids[ROLL_AXIS], ROLL_P, ROLL_I, ROLL_D, INTEGRAL_GUARD);
-  setPIDConstants(&angle_pids[PITCH_AXIS], PITCH_P, PITCH_I, PITCH_D, 
+  setPIDConstants(&angle_pids[PITCH_AXIS], PITCH_P, PITCH_I, PITCH_D,
       INTEGRAL_GUARD);
   setPIDConstants(&angle_pids[YAW_AXIS], YAW_P, YAW_I, YAW_D, INTEGRAL_GUARD);
 } //boardInit

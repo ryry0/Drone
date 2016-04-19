@@ -77,6 +77,9 @@
 
 #define INTEGRAL_GUARD 5000
 
+//in multiples of Systick timer calls (2ms at the moment)
+#define KILL_TIMEOUT 500 //1s timeout
+
 //just assume always get packet of length x
 #define PACKET_LENGTH 26
 
@@ -152,6 +155,7 @@ copter_setpoints_t copter_setpoints = {0}; //set points received from network
 volatile bool setpoints_updated = false; //"mutex" for setpoints
 volatile float current_error = 0;
 volatile uint16_t printf_counter = 0;
+volatile states_t state = OFF; //volatile for kill timeout
 
 pid_data_t angle_pids[NUM_AXES] = {0};
 
@@ -166,6 +170,7 @@ void _delay_ms (uint16_t ms);
 /**************************************************************************/
 void SysTick_Handler(void) {
   static copter_setpoints_t local_setpoints = {0};
+  static uint16_t kill_counter = 0;
 
   //LPC_GPIO->B0[P0_7] = 1;
 
@@ -185,7 +190,12 @@ void SysTick_Handler(void) {
     angle_pids[YAW_AXIS].integral_gain = local_setpoints.I;
 
     setpoints_updated = false;
+    kill_counter = 0;
   }
+
+  //kill if kill_counter is too high
+  if ((kill_counter > KILL_TIMEOUT) && (state == RUNNING))
+    state = OFF;
 
   //integrate gyro data for angle
   /*
@@ -279,7 +289,9 @@ void SysTick_Handler(void) {
           local_setpoints.throttle),
         0, 100);
 
-  printf_counter ++;
+  printf_counter++;
+  if (state == RUNNING)
+    kill_counter++;
   //LPC_GPIO->B0[P0_7] = 0;
 
 } //end SysTick_Handler
@@ -288,7 +300,6 @@ void SysTick_Handler(void) {
 /* MAIN */
 /**************************************************************************/
 int main(void) {
-  states_t state = OFF;
   input_states_t input_state = WAITING;
 
   int8_t packet_index = 0;

@@ -434,7 +434,7 @@ firmware: $(OBJS) $(SYS_OBJS)
 flash: firmware
 	-@echo ""
 	-@echo "Flashing device ..."
-	-@[ -e "/dev/sdb" ] && mount /dev/sdb /mnt && [ -e "$(MOUNT_POINT)/firmware.bin" ] && dd if=bin/firmware.bin of="$(MOUNT_POINT)/firmware.bin" conv=nocreat,notrunc && umount "$(MOUNT_POINT)" || echo "Error, no device?!"
+	-@[ -e "/dev/sda" ] && mount /dev/sda /mnt && [ -e "$(MOUNT_POINT)/firmware.bin" ] && dd if=bin/firmware.bin of="$(MOUNT_POINT)/firmware.bin" conv=nocreat,notrunc && umount "$(MOUNT_POINT)" || echo "Error, no device?!"
 
 lpcrc:
 	-@echo ""

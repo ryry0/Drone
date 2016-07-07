@@ -347,11 +347,15 @@ UsedLibrary="C:/EAGLE-7.6.0/lbr/xilinx-xc9.lbr"
 UsedLibrary="C:/EAGLE-7.6.0/lbr/xilinx-xcv.lbr"
 UsedLibrary="C:/EAGLE-7.6.0/lbr/zetex.lbr"
 UsedLibrary="C:/EAGLE-7.6.0/lbr/zilog.lbr"
+UsedLibrary="C:/Users/Ryan/Desktop/Projects/Drone/circuit_schematics/eagle_libs/ld1117v33/LD1117V33.lbr"
+UsedLibrary="C:/Users/Ryan/Desktop/Projects/Drone/circuit_schematics/eagle_libs/LPCXpresso_Boards_EAGLE_lib/LPCXpresso_boards.lbr"
+UsedLibrary="C:/Users/Ryan/Desktop/Projects/Drone/circuit_schematics/eagle_libs/SparkFun-Eagle-Libraries-master/SparkFun-Boards.lbr"
+UsedLibrary="C:/Users/Ryan/Desktop/Projects/Drone/circuit_schematics/eagle_libs/SparkFun-Eagle-Libraries-master/SparkFun-Electromechanical.lbr"
 
 [Win_1]
 Type="Control Panel"
 Loc="-8 22 1591 1169"
-State=1
+State=2
 Number=0
 
 [Desktop]

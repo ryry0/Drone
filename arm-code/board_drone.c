@@ -140,7 +140,7 @@ typedef union copter_setpoints_t { //setpoints for PID algo
   uint8_t data[PACKET_LENGTH];
 } copter_setpoints_t;
 
-typedef enum states_t {OFF, RUNNING} states_t;
+typedef enum states_t {OFF, RUNNING, HARD_KILL} states_t;
 typedef enum input_states_t {WAITING, UPDATING} input_states_t;
 
 /**************************************************************************/
@@ -192,6 +192,9 @@ void SysTick_Handler(void) {
     setpoints_updated = false;
     kill_counter = 0;
   }
+
+  //if (state != RUNNING)
+    //return;
 
   //kill if kill_counter is too high
   if ((kill_counter > KILL_TIMEOUT) && (state == RUNNING))
@@ -289,9 +292,10 @@ void SysTick_Handler(void) {
           local_setpoints.throttle),
         0, 100);
 
-  printf_counter++;
   if (state == RUNNING)
     kill_counter++;
+
+  //printf_counter++;
   //LPC_GPIO->B0[P0_7] = 0;
 
 } //end SysTick_Handler
@@ -348,7 +352,7 @@ int main(void) {
 
         if (LPC_GPIO->B0[P0_16] == 0) {
           while (LPC_GPIO->B0[P0_16] == 0);
-          //printf("Copter in flight mode.\n");
+          printf("Copter in flight mode.\n");
           LPC_GPIO->B0[P0_7] = 1;
           state = RUNNING;
         }
@@ -393,7 +397,7 @@ int main(void) {
         } //end input state machine
 
         if (copter_setpoints.hard_kill == 1) {
-          state = OFF;
+          state = HARD_KILL;
           LPC_GPIO->B0[P0_7] = 0;
         }
 
@@ -402,6 +406,17 @@ int main(void) {
           printf("%f \n", quad_copter.yaw_dot);
           */
         break; //end RUNNING
+
+      case HARD_KILL:
+        FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        for (size_t i = 0; i < NUM_AXES; ++i) {
+          copter_setpoints.set_angles[i] = 0.0;
+        }
+        copter_setpoints.throttle = 0;
+        break;
 
       default:
         break;

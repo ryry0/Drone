@@ -174,6 +174,9 @@ void SysTick_Handler(void) {
 
   //LPC_GPIO->B0[P0_7] = 1;
 
+  if (state != RUNNING)
+    return;
+
   if (setpoints_updated) {
     local_setpoints = copter_setpoints;
 
@@ -193,11 +196,9 @@ void SysTick_Handler(void) {
     kill_counter = 0;
   }
 
-  //if (state != RUNNING)
-    //return;
 
   //kill if kill_counter is too high
-  if ((kill_counter > KILL_TIMEOUT) && (state == RUNNING))
+  if (kill_counter > KILL_TIMEOUT)
     state = OFF;
 
   //integrate gyro data for angle
@@ -292,8 +293,7 @@ void SysTick_Handler(void) {
           local_setpoints.throttle),
         0, 100);
 
-  if (state == RUNNING)
-    kill_counter++;
+  kill_counter++;
 
   //printf_counter++;
   //LPC_GPIO->B0[P0_7] = 0;

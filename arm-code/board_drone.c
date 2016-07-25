@@ -313,13 +313,13 @@ int main(void) {
   calibrateAccel(&accel_data);
   calibrateGyro(&gyro_data);
 
-  uartSend((uint8_t *)AT_RESET, strlen(AT_RESET));
-  uartSend((uint8_t *)AT_STATION, strlen(AT_STATION));
-  uartSend((uint8_t *)AT_CONNECT, strlen(AT_CONNECT));
+  sendWifiCommand(AT_RESET);
+  sendWifiCommand(AT_STATION);
+  sendWifiCommand(AT_CONNECT);
   _delay_ms(1000);
-  uartSend((uint8_t *)AT_MULTI_CONN, strlen(AT_MULTI_CONN));
+  sendWifiCommand(AT_MULTI_CONN);
   _delay_ms(1000);
-  uartSend((uint8_t *)AT_CREAT_SERVER, strlen(AT_CREAT_SERVER));
+  sendWifiCommand(AT_CREAT_SERVER);
   _delay_ms(1000);
 
 
@@ -339,6 +339,10 @@ int main(void) {
 
         if (LPC_GPIO->B0[P0_17] == 0) {
           while (LPC_GPIO->B0[P0_17] == 0);
+          sendWifiCommand(AT_MULTI_CONN);
+          _delay_ms(1000);
+          sendWifiCommand(AT_CREAT_SERVER);
+          _delay_ms(1000);
           sendWifiCommand(AT_GET_IP);
         }
 
@@ -393,8 +397,10 @@ int main(void) {
           LPC_GPIO->B0[P0_7] = 0;
         }
 
+        /*
         if ((printf_counter % 50) == 0)
           printf("%f \n", quad_copter.yaw_dot);
+          */
         break; //end RUNNING
 
       default:

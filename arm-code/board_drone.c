@@ -51,10 +51,10 @@
 #define PERIOD_MATCH 1999
 
 //rotor defines
-#define FL_ROTOR LPC_CT16B0
-#define FR_ROTOR LPC_CT32B1
-#define BL_ROTOR LPC_CT32B0
-#define BR_ROTOR LPC_CT16B1
+#define F_ROTOR LPC_CT16B0
+#define R_ROTOR LPC_CT32B1
+#define L_ROTOR LPC_CT32B0
+#define B_ROTOR LPC_CT16B1
 
 //PID defines
 #define NUM_AXES 3
@@ -265,31 +265,27 @@ void SysTick_Handler(void) {
   //angle_pids].pid_output = constrain(angle_pids[i].pid_output, 0, 100);
 
 
-  FL_ROTOR->MR0 = ZERO_MOTOR_SPEED -
+  F_ROTOR->MR0 = ZERO_MOTOR_SPEED -
+    constrain((-angle_pids[PITCH_AXIS].pid_output +
+          //-angle_pids[YAW_AXIS].pid_output +
+          local_setpoints.throttle),
+        0, 100);
+
+  R_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((-angle_pids[ROLL_AXIS].pid_output +
-          -angle_pids[PITCH_AXIS].pid_output +
-          -angle_pids[YAW_AXIS].pid_output +
+          //angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         0, 100);
 
-  FR_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((-angle_pids[ROLL_AXIS].pid_output +
-          angle_pids[PITCH_AXIS].pid_output +
-          angle_pids[YAW_AXIS].pid_output +
+  B_ROTOR->MR0 = ZERO_MOTOR_SPEED -
+    constrain((angle_pids[PITCH_AXIS].pid_output +
+          //-angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         0, 100);
 
-  BR_ROTOR->MR0 = ZERO_MOTOR_SPEED -
+  L_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((angle_pids[ROLL_AXIS].pid_output +
-          angle_pids[PITCH_AXIS].pid_output +
-          -angle_pids[YAW_AXIS].pid_output +
-          local_setpoints.throttle),
-        0, 100);
-
-  BL_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((angle_pids[ROLL_AXIS].pid_output +
-          -angle_pids[PITCH_AXIS].pid_output +
-          angle_pids[YAW_AXIS].pid_output +
+          //angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         0, 100);
 
@@ -336,10 +332,10 @@ int main(void) {
 
     switch(state) {
       case OFF:
-        FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-        FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-        BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-        BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        F_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        R_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        B_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        L_ROTOR->MR0 = ZERO_MOTOR_SPEED;
 
         if (LPC_GPIO->B0[P0_17] == 0) {
           while (LPC_GPIO->B0[P0_17] == 0);
@@ -408,10 +404,10 @@ int main(void) {
         break; //end RUNNING
 
       case HARD_KILL:
-        FL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-        FR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-        BR_ROTOR->MR0 = ZERO_MOTOR_SPEED;
-        BL_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        F_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        R_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        B_ROTOR->MR0 = ZERO_MOTOR_SPEED;
+        L_ROTOR->MR0 = ZERO_MOTOR_SPEED;
         for (size_t i = 0; i < NUM_AXES; ++i) {
           copter_setpoints.set_angles[i] = 0.0;
         }

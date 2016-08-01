@@ -45,10 +45,10 @@
 #define PINMODE_CT32B0_MAT0 0x21
 #define PINMODE_CT32B1_MAT0 0xa3
 
-#define PRESCALER 719
-#define ZERO_MOTOR_SPEED 1900
-#define TOP_MOTOR_SPEED 1800
-#define PERIOD_MATCH 1999
+#define PRESCALER 71
+#define ZERO_MOTOR_SPEED 19000
+#define TOP_MOTOR_SPEED 18000
+#define PERIOD_MATCH 19999
 
 //rotor defines
 #define F_ROTOR LPC_CT16B0
@@ -80,8 +80,11 @@
 //in multiples of Systick timer calls (2ms at the moment)
 #define KILL_TIMEOUT 500 //1s timeout
 
+#define MAX_THROTTLE 1000
+#define MIN_THROTTLE 0
+
 //just assume always get packet of length x
-#define PACKET_LENGTH 26
+#define PACKET_LENGTH 27
 
 #include <string.h> /* strlen */
 #include <math.h>
@@ -134,8 +137,8 @@ typedef union copter_setpoints_t { //setpoints for PID algo
     float P;
     float I;
     float D;
+    uint16_t throttle;
     uint8_t hard_kill;
-    uint8_t throttle;
   };
   uint8_t data[PACKET_LENGTH];
 } copter_setpoints_t;
@@ -269,25 +272,25 @@ void SysTick_Handler(void) {
     constrain((-angle_pids[PITCH_AXIS].pid_output +
           //-angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
-        0, 100);
+        MIN_THROTTLE, MAX_THROTTLE);
 
   R_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((-angle_pids[ROLL_AXIS].pid_output +
           //angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
-        0, 100);
+        MIN_THROTTLE, MAX_THROTTLE);
 
   B_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((angle_pids[PITCH_AXIS].pid_output +
           //-angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
-        0, 100);
+        MIN_THROTTLE, MAX_THROTTLE);
 
   L_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((angle_pids[ROLL_AXIS].pid_output +
           //angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
-        0, 100);
+        MIN_THROTTLE, MAX_THROTTLE);
 
   kill_counter++;
 
@@ -546,7 +549,7 @@ void boardInit(void)
   /* SYSTICK SETUP */
   /**************************************************************************/
 
-  // Initialize systick interrupt to 10 ms 100 hz
+  // Initialize systick interrupt
   SysTick->CTRL = 0x07;
   SysTick->LOAD = 0x0002327f; //freq  = (system clk * desired interval) - 1
 

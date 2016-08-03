@@ -241,7 +241,7 @@ void SysTick_Handler(void) {
       angle_pids[i].integral_error = 0;
 
     angle_pids[i].integral_error = constrain(angle_pids[i].integral_error,
-        -angle_pids[i].integral_guard, angle_pids[i].integral_guard);
+        0, angle_pids[i].integral_guard);
 
     angle_pids[i].pid_output = angle_pids[i].proportional_gain * current_error +
       angle_pids[i].integral_gain * angle_pids[i].integral_error +
@@ -402,7 +402,7 @@ int main(void) {
 
         /*
         if ((printf_counter % 50) == 0)
-          printf("%f \n", quad_copter.yaw_dot);
+          printf("%d \n", copter_setpoints.throttle);
           */
         break; //end RUNNING
 
@@ -414,7 +414,7 @@ int main(void) {
         for (size_t i = 0; i < NUM_AXES; ++i) {
           copter_setpoints.set_angles[i] = 0.0;
         }
-        copter_setpoints.throttle = 0;
+        copter_setpoints.throttle = MIN_THROTTLE;
         break;
 
       default:

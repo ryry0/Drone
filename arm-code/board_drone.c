@@ -241,7 +241,7 @@ void SysTick_Handler(void) {
       angle_pids[i].integral_error = 0;
 
     angle_pids[i].integral_error = constrain(angle_pids[i].integral_error,
-        0, angle_pids[i].integral_guard);
+        -angle_pids[i].integral_guard, angle_pids[i].integral_guard);
 
     angle_pids[i].pid_output = angle_pids[i].proportional_gain * current_error +
       angle_pids[i].integral_gain * angle_pids[i].integral_error +
@@ -275,7 +275,7 @@ void SysTick_Handler(void) {
         MIN_THROTTLE, MAX_THROTTLE);
 
   R_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((-angle_pids[ROLL_AXIS].pid_output +
+    constrain((lowConstrain(-angle_pids[ROLL_AXIS].pid_output, 0) +
           //angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         MIN_THROTTLE, MAX_THROTTLE);
@@ -287,14 +287,14 @@ void SysTick_Handler(void) {
         MIN_THROTTLE, MAX_THROTTLE);
 
   L_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((angle_pids[ROLL_AXIS].pid_output +
+    constrain((lowConstrain(angle_pids[ROLL_AXIS].pid_output, 0) +
           //angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         MIN_THROTTLE, MAX_THROTTLE);
 
   kill_counter++;
+  printf_counter++;
 
-  //printf_counter++;
   //LPC_GPIO->B0[P0_7] = 0;
 
 } //end SysTick_Handler
@@ -351,13 +351,17 @@ int main(void) {
 
         if (LPC_GPIO->B0[P0_16] == 0) {
           while (LPC_GPIO->B0[P0_16] == 0);
+#ifdef SERIAL_DEBUG
           printf("Copter in flight mode.\n");
+#endif
           LPC_GPIO->B0[P0_7] = 1;
           state = RUNNING;
         }
 
         if (input_updated) {
+#ifdef SERIAL_DEBUG
           printf("%c", (char) input_byte);
+#endif
           input_updated = false;
         }
         break;
@@ -400,10 +404,13 @@ int main(void) {
           LPC_GPIO->B0[P0_7] = 0;
         }
 
+#ifdef SERIAL_DEBUG
         /*
         if ((printf_counter % 50) == 0)
-          printf("%d \n", copter_setpoints.throttle);
-          */
+          printf("%f %f\n", angle_pids[ROLL_AXIS].pid_output,
+              angle_pids[ROLL_AXIS].integral_error);
+              */
+#endif
         break; //end RUNNING
 
       case HARD_KILL:
@@ -419,22 +426,13 @@ int main(void) {
 
       default:
         break;
-    }
-
+    } //end switch (state)
 
     //flush the read buffer
     if (uartRxBufferDataPending()) {
       input_byte = uartRxBufferRead();
       input_updated = true;
-#ifdef SERIAL_DEBUG
-      //printf("%c", (char) input_byte);
-#endif
     }
-
-#ifdef SERIAL_DEBUG
-    //printf("%f %f %f\n",
-    //quad_copter.roll, quad_copter.pitch, quad_copter.yaw);
-#endif
 
   } //end for(;;)
 } //end main

@@ -2,6 +2,7 @@
 #define PID_H_
 
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
+#define lowConstrain(amt,low) ((amt)<(low)?(low):(amt))
 
 //Use this data structure to create a customized PID per motor
 typedef struct pid_data_t {

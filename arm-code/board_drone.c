@@ -236,28 +236,7 @@ void SysTick_Handler(void) {
     angle_pids[i].pid_output = angle_pids[i].proportional_gain * current_error +
       angle_pids[i].integral_gain * angle_pids[i].integral_error +
       angle_pids[i].derivative_gain * gyro_data.angle_dots[i]/GYRO_SCALING;
-
-    //angle_pids[i].pid_output = constrain(angle_pids[i].pid_output, 0, 100);
   }
-
-  //run pid algo for yaw axis
-  current_error = local_setpoints.set_angles[YAW_AXIS] -
-    quad_copter.angles[YAW_AXIS];
-
-  if (local_setpoints.throttle > 0)
-    angle_pids[YAW_AXIS].integral_error += current_error;
-  else
-    angle_pids[YAW_AXIS].integral_error = 0;
-
-  angle_pids[YAW_AXIS].integral_error = constrain(angle_pids[YAW_AXIS].integral_error,
-      -angle_pids[YAW_AXIS].integral_guard, angle_pids[YAW_AXIS].integral_guard);
-
-  angle_pids[YAW_AXIS].pid_output = angle_pids[YAW_AXIS].proportional_gain * current_error +
-    angle_pids[YAW_AXIS].integral_gain * angle_pids[YAW_AXIS].integral_error;// +
-    //angle_pids[YAW_AXIS].derivative_gain * gyro_data.angle_dots[YAW_AXIS]/GYRO_SCALING;
-
-  //angle_pids].pid_output = constrain(angle_pids[i].pid_output, 0, 100);
-
 
   F_ROTOR->MR0 = ZERO_MOTOR_SPEED -
     constrain((-angle_pids[PITCH_AXIS].pid_output +

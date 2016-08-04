@@ -16,9 +16,14 @@
 
 //value in g is (g-rnge / 2^resolution)
 typedef struct accel_data_t {
-  float roll;
-  float pitch;
-  float yaw;
+  union {
+    struct {
+      float roll;
+      float pitch;
+      float yaw;
+    };
+    float angles[3];
+  };
 
   //Accelerometer val in gs
   float xg;

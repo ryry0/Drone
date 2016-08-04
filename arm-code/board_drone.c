@@ -180,20 +180,15 @@ void SysTick_Handler(void) {
   if (state != RUNNING)
     return;
 
+  //copy fully updated setpoints to local variable and update PID constants
   if (setpoints_updated) {
     local_setpoints = copter_setpoints;
 
-    angle_pids[ROLL_AXIS].proportional_gain = local_setpoints.P;
-    angle_pids[ROLL_AXIS].integral_gain = local_setpoints.I;
-    angle_pids[ROLL_AXIS].derivative_gain = local_setpoints.D;
-
-    angle_pids[PITCH_AXIS].proportional_gain = local_setpoints.P;
-    angle_pids[PITCH_AXIS].integral_gain = local_setpoints.I;
-    angle_pids[PITCH_AXIS].derivative_gain = local_setpoints.D;
-
-
-    angle_pids[YAW_AXIS].proportional_gain = local_setpoints.P;
-    angle_pids[YAW_AXIS].integral_gain = local_setpoints.I;
+    for (uint8_t i = 0; i < NUM_AXES; ++i) {
+      angle_pids[i].proportional_gain = local_setpoints.P;
+      angle_pids[i].integral_gain = local_setpoints.I;
+      angle_pids[i].derivative_gain = local_setpoints.D;
+    }
 
     setpoints_updated = false;
     kill_counter = 0;
@@ -204,14 +199,13 @@ void SysTick_Handler(void) {
   if (kill_counter > KILL_TIMEOUT)
     state = OFF;
 
-  //integrate gyro data for angle
-  /*
-     gyro_data.yaw += (gyro_data.raw_yaw_dot/GYRO_SCALING) * DELTA_TIME;
-     */
-
+  //scale accelerometer data
   accel_data.xg = accel_data.raw_x * ACCEL_SCALING;
   accel_data.yg = accel_data.raw_y * ACCEL_SCALING;
   accel_data.zg = accel_data.raw_z * ACCEL_SCALING;
+
+  //scale yaw gyro data
+  quad_copter.yaw_dot = gyro_data.raw_yaw_dot/GYRO_SCALING;
 
   //derive angle from accelerometer
   accel_data.roll = atan2(accel_data.yg, accel_data.zg)* 180/M_PI;
@@ -220,18 +214,14 @@ void SysTick_Handler(void) {
       sqrt(accel_data.yg*accel_data.yg + accel_data.zg*accel_data.zg))*
     180/M_PI;
 
-  //run complementary filter
-  quad_copter.roll = FIL_ALPHA *
-    (quad_copter.roll + ((gyro_data.raw_roll_dot/GYRO_SCALING)*DELTA_TIME)) +
-    (1-FIL_ALPHA) * accel_data.roll;
+  //run complementary filter for roll and pitch axes only
+  for (uint8_t i = 0; i < NUM_AXES - 1; ++i) {
+    quad_copter.angles[i] = FIL_ALPHA *
+      (quad_copter.angles[i] + ((gyro_data.angle_dots[i]/GYRO_SCALING)*DELTA_TIME)) +
+      (1-FIL_ALPHA) * accel_data.angles[i];
+  }
 
-  quad_copter.pitch = FIL_ALPHA *
-    (quad_copter.pitch + ((gyro_data.raw_pitch_dot/GYRO_SCALING)*DELTA_TIME)) +
-    (1-FIL_ALPHA) * accel_data.pitch;
-
-  quad_copter.yaw_dot = gyro_data.raw_yaw_dot/GYRO_SCALING;
-
-  //run pid algo
+  //run pid algo for roll and pitch axes
   for (uint8_t i = 0; i < NUM_AXES - 1; i++) {
     current_error = local_setpoints.set_angles[i] - quad_copter.angles[i];
 
@@ -250,6 +240,7 @@ void SysTick_Handler(void) {
     //angle_pids[i].pid_output = constrain(angle_pids[i].pid_output, 0, 100);
   }
 
+  //run pid algo for yaw axis
   current_error = local_setpoints.set_angles[YAW_AXIS] -
     quad_copter.angles[YAW_AXIS];
 

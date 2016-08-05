@@ -75,7 +75,14 @@
 #define YAW_I 0.0
 #define YAW_D 0.0
 
-#define INTEGRAL_GUARD 5000
+/*
+ * derived from takeoff throttle = 400
+ * Max throttle resolution = 1000-400 = 600
+ * Integral constant = ~0.0001 order of magnitude
+ * Max error integral = 600/0.0001
+ */
+#define MAX_THROT_RES 600
+#define INTEGRAL_GUARD 6000000
 
 //in multiples of Systick timer calls (2ms at the moment)
 #define KILL_TIMEOUT 500 //1s timeout
@@ -156,7 +163,6 @@ volatile accel_data_t accel_data = {0};
 
 copter_setpoints_t copter_setpoints = {0}; //set points received from network
 volatile bool setpoints_updated = false; //"mutex" for setpoints
-volatile float current_error = 0;
 volatile uint16_t printf_counter = 0;
 volatile states_t state = OFF; //volatile for kill timeout
 
@@ -167,6 +173,7 @@ pid_data_t angle_pids[NUM_AXES] = {0};
 /**************************************************************************/
 void boardInit(void);
 void _delay_ms (uint16_t ms);
+float calcPidOut(bool negate, pid_data_t * pid_data, float current_error, float low_bound);
 
 /**************************************************************************/
 /* SYSTICK HANDLER */
@@ -174,6 +181,7 @@ void _delay_ms (uint16_t ms);
 void SysTick_Handler(void) {
   static copter_setpoints_t local_setpoints = {0};
   static uint16_t kill_counter = 0;
+  float current_error[NUM_AXES] = {0};
 
   //LPC_GPIO->B0[P0_7] = 1;
 
@@ -223,41 +231,48 @@ void SysTick_Handler(void) {
 
   //run pid algo for roll and pitch axes
   for (uint8_t i = 0; i < NUM_AXES - 1; i++) {
-    current_error = local_setpoints.set_angles[i] - quad_copter.angles[i];
+    current_error[i] = local_setpoints.set_angles[i] - quad_copter.angles[i];
 
     if (local_setpoints.throttle > 0)
-      angle_pids[i].integral_error += current_error;
+      angle_pids[i].integral_error += current_error[i];
     else
       angle_pids[i].integral_error = 0;
 
     angle_pids[i].integral_error = constrain(angle_pids[i].integral_error,
         -angle_pids[i].integral_guard, angle_pids[i].integral_guard);
 
-    angle_pids[i].pid_output = angle_pids[i].proportional_gain * current_error +
-      angle_pids[i].integral_gain * angle_pids[i].integral_error +
-      angle_pids[i].derivative_gain * gyro_data.angle_dots[i]/GYRO_SCALING;
+    angle_pids[i].previous_error = -gyro_data.angle_dots[i]/GYRO_SCALING;
   }
 
+  float f_pid_output =
+    calcPidOut(true, &angle_pids[PITCH_AXIS], current_error[PITCH_AXIS], -local_setpoints.throttle);
+  float r_pid_output =
+    calcPidOut(true, &angle_pids[ROLL_AXIS], current_error[ROLL_AXIS], -local_setpoints.throttle);
+  float b_pid_output =
+    calcPidOut(false, &angle_pids[PITCH_AXIS], current_error[PITCH_AXIS], -local_setpoints.throttle);
+  float l_pid_output =
+    calcPidOut(false, &angle_pids[ROLL_AXIS], current_error[ROLL_AXIS], -local_setpoints.throttle);
+
   F_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((-angle_pids[PITCH_AXIS].pid_output +
+    constrain((f_pid_output +
           //-angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         MIN_THROTTLE, MAX_THROTTLE);
 
   R_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((lowConstrain(-angle_pids[ROLL_AXIS].pid_output, 0) +
+    constrain((r_pid_output +
           //angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         MIN_THROTTLE, MAX_THROTTLE);
 
   B_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((angle_pids[PITCH_AXIS].pid_output +
+    constrain((b_pid_output +
           //-angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         MIN_THROTTLE, MAX_THROTTLE);
 
   L_ROTOR->MR0 = ZERO_MOTOR_SPEED -
-    constrain((lowConstrain(angle_pids[ROLL_AXIS].pid_output, 0) +
+    constrain((l_pid_output +
           //angle_pids[YAW_AXIS].pid_output +
           local_setpoints.throttle),
         MIN_THROTTLE, MAX_THROTTLE);
@@ -543,4 +558,17 @@ void boardInit(void)
   setPIDConstants(&angle_pids[YAW_AXIS], YAW_P, YAW_I, YAW_D, INTEGRAL_GUARD);
 } //boardInit
 
+/**************************************************************************/
+/* calcPidOut helper function for calculating custom PID */
+/**************************************************************************/
+float calcPidOut(bool negate, pid_data_t * pid_data, float current_error, float low_bound) {
+  float mult = negate ? -1.0f : 1.0f;
+
+  float ans =  mult*pid_data->proportional_gain * current_error +
+    constrain(
+        (mult*pid_data->integral_gain * pid_data->integral_error),
+        low_bound,  MAX_THROT_RES) +
+    mult*pid_data->derivative_gain * pid_data->previous_error;
+  return ans;
+} //end calcPidOut
 #endif /* CFG_BRD_LPCXPRESSO_LPC1347 */
